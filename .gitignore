@@ -9,3 +9,4 @@
 *.png
 *.h5
 *.pickle
+*.ipynb_checkpoints
