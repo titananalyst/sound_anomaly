@@ -1,9 +1,95 @@
-import os
-import librosa
-import numpy as np
-import matplotlib.pyplot as plt
-from tqdm import tqdm
+#!/usr/bin/env python
 
+import pickle
+import os
+import sys
+import glob
+
+import numpy as np
+import matplotlib.pylab as plt
+
+
+import h5py
+import time
+import random
+import itertools
+import pandas as pd
+import seaborn as sns
+import tensorflow as tf
+from pandas import DataFrame
+from itertools import product
+from matplotlib import gridspec
+from operator import itemgetter
+from tqdm import tqdm
+from time import gmtime, strftime
+from sklearn.model_selection import train_test_split
+
+import yaml
+import logging
+import librosa
+
+####################################################################################
+
+"""
+Standard output is logged in "baseline.log".
+"""
+logging.basicConfig(level=logging.DEBUG, filename="baseline.log")
+logger = logging.getLogger(' ')
+handler = logging.StreamHandler()
+formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+handler.setFormatter(formatter)
+logger.addHandler(handler)
+
+####################################################################################
+
+# Directories
+PICKLE_DIR = 'D:\9999_OneDrive_ZHAW\OneDrive - ZHAW\BA_ZHAW_RTO\pickle'
+PICKLE_DIR_SMALL = 'D:\9999_OneDrive_ZHAW\OneDrive - ZHAW\BA_ZHAW_RTO\pickle\subset'
+root = 'Z:\\BA\\mimii_baseline\\dataset'
+
+####################################################################################
+
+# Visualizer
+import matplotlib.pyplot as plt
+
+class Visualizer(object):
+    def __init__(self):
+        self.fig = plt.figure(figsize=(30, 10))
+        plt.subplots_adjust(wspace=0.3, hspace=0.3)
+
+    def loss_plot(self, loss, val_loss):
+        """
+        Plot loss curve.
+
+        loss : list [ float ]
+            training loss time series.
+        val_loss : list [ float ]
+            validation loss time series.
+
+        return   : None
+        """
+        ax = self.fig.add_subplot(1, 1, 1)
+        ax.cla()
+        ax.plot(loss, label="Train")
+        ax.plot(val_loss, label="Test")
+        ax.set_title("Model loss")
+        ax.set_xlabel("Epoch")
+        ax.set_ylabel("Loss")
+        ax.legend(loc="upper right")
+
+    def save_figure(self, name):
+        """
+        Save figure.
+
+        name : str
+            save .png file path.
+
+        return : None
+        """
+        self.fig.savefig(name)
+
+
+####################################################################################
 
 def file_names(root, db_levels=None, ids=None, file_types=None, num_files=None):
     files = []
@@ -39,10 +125,10 @@ def file_names(root, db_levels=None, ids=None, file_types=None, num_files=None):
     return files
 
 
-def dataloader(files_list, n_fft=1024, hop_length=512, n_mels=64, frames=5):
+def dataloader(files_list, n_fft=1024, hop_length=512, n_mels=64, frames=5, pwr=2, msg='Dataloader: '):
     dims = n_mels * frames
     
-    for idx in tqdm(range(len(files_list)), desc='Dataloader: '):
+    for idx in tqdm(range(len(files_list)), desc=msg):
         signal, sr = file_load(files_list[idx])
         features = extract_features(
         signal,
@@ -51,6 +137,7 @@ def dataloader(files_list, n_fft=1024, hop_length=512, n_mels=64, frames=5):
         hop_length=hop_length,
         n_mels=n_mels,
         frames=frames,
+        power=pwr
         )
         
         if idx == 0:
@@ -64,7 +151,7 @@ def dataloader(files_list, n_fft=1024, hop_length=512, n_mels=64, frames=5):
         
 
 def file_load(wav_name, mono=False, channel=0):
-    signal, sr = librosa.load(wav_name, mono=False, sr=None)
+    signal, sr = librosa.load(wav_name, mono=mono, sr=None)
     if signal.ndim <= 1:
         sound_file = signal, sr
     else:
@@ -73,12 +160,15 @@ def file_load(wav_name, mono=False, channel=0):
     return sound_file
   
     
+
 def extract_features(signal, sr, n_fft=1024, hop_length=512, 
-                     n_mels=64, frames=5):
+                     n_mels=64, frames=5, power = 2): # added power
     mel_spectrogram = librosa.feature.melspectrogram(
-        y=signal, sr=sr, n_fft=n_fft, hop_length=hop_length, n_mels=n_mels
+        y=signal, sr=sr, n_fft=n_fft, hop_length=hop_length, n_mels=n_mels, power=power # added power
     )
-    log_mel_spectrogram = librosa.power_to_db(mel_spectrogram, ref=np.max)
+    # here was power to db
+    # added log scale
+    log_mel_spectrogram = 20.0 / power * np.log10(mel_spectrogram + sys.float_info.epsilon)
     features_vector_size = log_mel_spectrogram.shape[1] - frames + 1
     
     dims = frames * n_mels
@@ -95,120 +185,550 @@ def extract_features(signal, sr, n_fft=1024, hop_length=512,
     return features
 
 
-root = 'Z:\\BA\\mimii_baseline\\dataset'
+# pickle I/O
+def save_pickle(filename, save_data):
+    """
+    picklenize the data.
 
-# Load all files
-all_files = file_names(root)
+    filename : str
+        pickle filename
+    data : free datatype
+        some data will be picklenized
 
-# Load files from specific dB levels and IDs
-specific_files = file_names(root, db_levels=['0dB', '6dB'], ids=['id_00', 'id_04'])
-
-# Load normal files only
-normal_files = file_names(root, file_types=['normal'])
-
-# Load a limited number of files from each folder
-limited_files = file_names(root, num_files=10)
-
-# Load evenly distributed files across specified dB levels, IDs, and file types
-evenly_distributed_files = file_names(root, db_levels=['0dB', '6dB'], ids=['id_00', 'id_04'], num_files=20)
+    return : None
+    """
+    with open(filename, 'wb') as sf:
+        pickle.dump(save_data, sf)
 
 
-six_00_norm = file_names(root, db_levels=['6dB'], ids=['id_00'], file_types=['normal'])
-six_00_abnorm = file_names(root, db_levels=['6dB'], ids=['id_00'], file_types=['abnormal'])
+def load_pickle(filename):
+    """
+    unpicklenize the data.
 
-six_02_norm = file_names(root, db_levels=['6dB'], ids=['id_02'], file_types=['normal'])
-six_02_abnorm = file_names(root, db_levels=['6dB'], ids=['id_02'], file_types=['abnormal'])
+    filename : str
+        pickle filename
 
-six_04_norm = file_names(root, db_levels=['6dB'], ids=['id_04'], file_types=['normal'])
-six_04_abnorm = file_names(root, db_levels=['6dB'], ids=['id_04'], file_types=['abnormal'])
-
-six_06_norm = file_names(root, db_levels=['6dB'], ids=['id_06'], file_types=['normal'])
-six_06_abnorm = file_names(root, db_levels=['6dB'], ids=['id_06'], file_types=['abnormal'])
-
-six_norm = file_names(root, db_levels=['6dB'], ids=['id_00', 'id_02', 'id_04', 'id_06'], file_types=['normal'])
-six_abnorm = file_names(root, db_levels=['6dB'], ids=['id_00', 'id_02', 'id_04', 'id_06'], file_types=['abnormal'])
-
-six_all = file_names(root, db_levels=['6dB'], ids=['id_00', 'id_02', 'id_04', 'id_06'])
-
-print(len(six_00_norm), len(six_00_abnorm))
-print(len(six_02_norm), len(six_02_abnorm))
-print(len(six_04_norm), len(six_04_abnorm))
-print(len(six_06_norm), len(six_06_abnorm))
-print(len(six_norm), len(six_abnorm))
-print(len(six_all))
+    return : data
+    """
+    with open(filename, 'rb') as lf:
+        load_data = pickle.load(lf)
+    return load_data
 
 
+# Normalization
+def normalize_data(x, lb, ub, max_v=1.0, min_v=-1.0):
+    '''
+    Max-Min normalize of 'x' with max value 'max_v' min value 'min_v'
+    '''
 
-# takes about 12-14 minutes
-n_fft = 1024
-hop_length = 512
-n_mels = 64
-frames = 5
-
-dim_1 = 313 - frames + 1
-dim_2 = n_mels * frames
-
-# Load file loacations
-six_norm = file_names(root, db_levels=['6dB'], ids=['id_00', 'id_02', 'id_04', 'id_06'], file_types=['normal'], num_files=50)
-six_abnorm = file_names(root, db_levels=['6dB'], ids=['id_00', 'id_02', 'id_04', 'id_06'], file_types=['abnormal'], num_files=50)
-
-# Feature labelling
-six_norm_labels = np.zeros(len(six_norm))
-six_abnorm_labels = np.ones(len(six_abnorm))
-
-
-six_norm_data = dataloader(
-    six_norm, n_fft=n_fft, hop_length=hop_length, n_mels=n_mels, frames=frames)
-six_abnorm_data = dataloader(
-    six_abnorm, n_fft=n_fft, hop_length=hop_length, n_mels=n_mels, frames=frames)
-
-
-def reshape_data(normal_data, abnormal_data, frames, n_mels):
-    dim_1 = 313 - frames + 1
-    dim_2 = n_mels * frames
-
-    normal_data_resh = normal_data.reshape(int(normal_data.shape[0] / dim_1), dim_1, dim_2)
-    abnormal_data_resh = abnormal_data.reshape(int(abnormal_data.shape[0] / dim_1), dim_1, dim_2)
-
-    return normal_data_resh, abnormal_data_resh
-
-
-n_mels = 64
-frames = 5
-six_norm_resh, six_abnorm_resh = reshape_data(six_norm_data, six_abnorm_data, frames=frames, n_mels=n_mels)
-
-
-def plot_examples(normal_data_resh, abnormal_data_resh, normal_files, n_examples=3):
-    fig, axs = plt.subplots(2, n_examples, figsize=(24, 10))
+    # Set-up
+    if len(ub)==0:
+        ub = x.max(0) # OPTION 1
+        # applied to the first dimension (0) columns of the data
+        #ub = np.percentile(x, 99.9, axis=0, keepdims=True) # OPTION 2:
+        
+    if len(lb)==0:
+        lb = x.min(0) 
+        #lb = np.percentile(x, 0.1, axis=0, keepdims=True)
     
-    # load one file to get sampling rate
-    _, sr = file_load(normal_files[0])
+    ub.shape = (1,-1)
+    lb.shape = (1,-1)           
+    max_min = max_v - min_v
+    delta = ub-lb
+
+    # Compute
+    x_n = max_min * (x - lb) / delta + min_v
+    if 0 in delta:
+        idx = np.ravel(delta == 0)
+        x_n[:,idx] = x[:,idx] - lb[:, idx]
+
+    return x_n, lb, ub 
+
+# advanced data loader which also normalizes and saves the data
+# the dataloader can be used to load single machines with different dB
+# be aware that the file naming may differ if you use it for total 6dB
+# or total machines at each dB. not tested yet.
+def dataloader_adv(root, db_levels, ids, file_types, n_fft, hop_length, n_mels, frames, pickle_dir, num_files=None):
+    """
+    load files and save the directory names in a list
+    create labels using the "normal", "abnormal" statement in the file_paths
+    use dataloader to load sound data from files
+    normalize data the data to use for AE
+    save all the data as .pickle to easily load afterwards
+    """
     
-    for i in range(n_examples):
-        # Plot normal examples
-        librosa.display.specshow(
-            normal_data_resh[i],
-            sr=sr,
-            hop_length=hop_length,
-            cmap="viridis",
-            ax=axs[0, i]
-        )
-        axs[0, i].set_title(f"Normal Example {i+1}")
+    # Load file locations
+    file_locs = file_names(root, db_levels=db_levels, ids=ids, file_types=file_types, num_files=num_files)
 
-        # Plot abnormal examples
-        librosa.display.specshow(
-            abnormal_data_resh[i],
-            sr=sr,
-            hop_length=hop_length,
-            cmap="viridis",
-            ax=axs[1, i]
-        )
-        axs[1, i].set_title(f"Abnormal Example {i+1}")
+    # Feature labelling
+    labels = np.zeros(len(file_locs)) if 'normal' in file_types else np.ones(len(file_locs))
 
-    plt.tight_layout()
-    plt.show()
+    # Load and process data
+    data = dataloader(file_locs, n_fft=n_fft, hop_length=hop_length, n_mels=n_mels, frames=frames)
+    
+    # Normalize data
+    data_n, _, _ = normalize_data(data, [], [], max_v=1.0, min_v=0.0)
 
-plot_examples(six_norm_resh, six_abnorm_resh, six_norm)
+    id_str = '_'.join([id_.replace('_', '') for id_ in ids])
+    db_str = '_'.join(db_levels)
+    norm_abnorm = 'norm' if file_types[0] == 'normal' else 'abnorm'
+    file_prefix = f'{id_str}_{db_str}_{norm_abnorm}'
+    save_pickle(f'{file_prefix}', file_locs, root=pickle_dir)
+    save_pickle(f'{file_prefix}_data', data, root=pickle_dir)
+    save_pickle(f'{file_prefix}_labels', labels, root=pickle_dir)
+    save_pickle(f'{file_prefix}_data_n', data_n, root=pickle_dir)
 
-# print(six_norm_data[0])
-# print(six_norm_resh[0])
+    return file_locs, labels, data, data_n
+
+
+def dataset_generator(target_dir,
+                      normal_dir_name="normal",
+                      abnormal_dir_name="abnormal",
+                      ext="wav"):
+    """
+    target_dir : str
+        base directory path of the dataset
+    normal_dir_name : str (default="normal")
+        directory name the normal data located in
+    abnormal_dir_name : str (default="abnormal")
+        directory name the abnormal data located in
+    ext : str (default="wav")
+        filename extension of audio files 
+
+    return : 
+        train_data : numpy.array( numpy.array( float ) )
+            training dataset
+            * dataset.shape = (total_dataset_size, feature_vector_length)
+        train_files : list [ str ]
+            file list for training
+        train_labels : list [ boolean ] 
+            label info. list for training
+            * normal/abnormal = 0/1
+        eval_files : list [ str ]
+            file list for evaluation
+        eval_labels : list [ boolean ] 
+            label info. list for evaluation
+            * normal/abnormal = 0/1
+    """
+    logger.info("target_dir : {}".format(target_dir))
+
+    # 01 normal list generate
+    normal_files = sorted(glob.glob(
+        os.path.abspath("{dir}/{normal_dir_name}/*.{ext}".format(dir=target_dir,
+                                                                 normal_dir_name=normal_dir_name,
+                                                                 ext=ext))))
+    normal_labels = np.zeros(len(normal_files))
+    if len(normal_files) == 0:
+        logger.exception("no_wav_data!!")
+
+    # 02 abnormal list generate
+    abnormal_files = sorted(glob.glob(
+        os.path.abspath("{dir}/{abnormal_dir_name}/*.{ext}".format(dir=target_dir,
+                                                                   abnormal_dir_name=abnormal_dir_name,
+                                                                   ext=ext))))
+    abnormal_labels = np.ones(len(abnormal_files))
+    if len(abnormal_files) == 0:
+        logger.exception("no_wav_data!!")
+
+    # 03 separate train & eval
+    train_files = normal_files[len(abnormal_files):]
+    train_labels = normal_labels[len(abnormal_files):]
+    eval_files = np.concatenate((normal_files[:len(abnormal_files)], abnormal_files), axis=0)
+    eval_labels = np.concatenate((normal_labels[:len(abnormal_files)], abnormal_labels), axis=0)
+    logger.info("train_file num : {num}".format(num=len(train_files)))
+    logger.info("eval_file  num : {num}".format(num=len(eval_files)))
+
+    return train_files, train_labels, eval_files, eval_labels
+
+####################################################################################
+# Model
+####################################################################################
+
+def create_encoder(input_shape, config):
+    """
+    Creates an encoder network with an architecture
+    following a geometric series where each hidden layer 
+    has half the number of neurons as the previous layer
+    inputs:
+        input_shape: tuple with input shape
+        config: dictionary with nn configuration
+    outputs:
+        z: np.array with lantent space
+        encoder: tf model        
+    """ 
+    
+    # Architecture
+    latent_dim = config['n_ls_a']  # latent space dim
+    cells = [int(config['n_cl_a']*(0.5)**i) for i in range(config['n_hl_a'])]
+    
+    
+    # Define the inputs, input layer
+    X_inputs = tf.keras.Input(shape=input_shape, name='encoder_input') 
+    X = X_inputs
+    
+    # Encoding, going through the hidden layers (cells defined above)
+    for i in range(config['n_hl_a']):
+        X = tf.keras.layers.Dense(cells[i],
+                                  activation=config['activ'],
+                                  kernel_initializer=tf.keras.initializers.glorot_uniform(seed=config['seed']))(X)
+        
+    # Latent vector
+    z = tf.keras.layers.Dense(latent_dim, name='z')(X)  
+    
+    # Build encoder from 'X_inputs' to 'z' space
+    encoder = tf.keras.Model(X_inputs, z, name='encoder')
+    
+    return z, encoder
+
+def create_decoder(output_shape, config):
+    """
+    inputs:
+        input_shape: tuple with input shape
+        config: dictionary with nn configuration
+    outputs:
+        outputs: np.array with reconstruction signal
+        decoder: tf model        
+    """
+    
+    # Architecture
+    latent_dim = config['n_ls_a']
+    cells = [int(config['n_cl_a']*(0.5)**i) for i in range(config['n_hl_a'])]
+    
+    # Define the inputs (from vector to time-dependent input)
+    Z_inputs = tf.keras.Input(shape=(latent_dim,))
+    X = Z_inputs
+    
+    # Dencoding      
+    for i in reversed(range(config['n_hl_a'])):
+        X = tf.keras.layers.Dense(cells[i],                                       
+                                  activation=config['activ'],
+                                  kernel_initializer=tf.keras.initializers.glorot_uniform(seed=config['seed']))(X)
+
+    # Reconstructed input
+    outputs = tf.keras.layers.Dense(output_shape[-1])(X)
+    
+    # Build decoder model
+    decoder = tf.keras.Model(Z_inputs, outputs, name='decoder')
+    # rebuilds the input to the output
+    
+    return outputs, decoder
+
+def create_autoencoder(input_shape, output_shape, config):
+    """
+    inputs:
+        input_shape: tuple with input shape
+        output_shape: tuple with output shape (in case it is an asymetric AE)
+        config: dictionary with nn configuration
+    outputs:
+        autoencoder, encoder, decoder: tf models        
+    """
+    
+    # Define the inputs
+    X_inputs = tf.keras.Input(shape=input_shape) 
+    
+    # Create encoder
+    z, encoder = create_encoder(input_shape, config) 
+    
+    # Create decoder
+    outputs, decoder = create_decoder(output_shape, config)
+   
+    # Create autoencoder
+    X_hat = decoder(encoder(X_inputs))
+    autoencoder = tf.keras.Model(X_inputs, X_hat, name='ae')    
+
+    # Optimiser set-up
+    opt = tf.keras.optimizers.legacy.Adam(learning_rate=0.001, beta_1=0.9, beta_2=0.999, epsilon=None, decay=0.0, amsgrad=True)
+    
+    # Compilation
+    autoencoder.compile(optimizer=opt, loss="mean_squared_error")
+    
+    return autoencoder, encoder, decoder
+
+
+def fit_model_ul(OUTFOLDER, 
+                   X_train, Y_train, 
+                   X_val, Y_val,
+                   X_test, Y_test,
+                   config, label, generate=True):
+    """
+    Creates and trains a NN with unsupervised learning strategy: 
+    define model shapes, create model, fit model, plot training loss and save model
+    inputs:
+        OUTFOLDER: path to storage or model folder
+        X_{train, val, test}: np.array with train, val and test input features.
+        Y_{train, val, test}: np.array with train, val and test target features.
+        config: dictionary with NN configuration (i.e. hyperparameters).
+        label: str with model name for storage or loading
+        generate_a: boolean with load or run.
+    outputs:
+        loss_val: np.array with loss in val dataset
+        Y_hat_{train, val, test}: np.array with train, val and test output predictions.       
+    """
+    if generate:
+        # Set-up I - 
+        seed = config['seed']
+        os.environ['PYTHONHASHSEED'] = '0'
+        np.random.seed(seed)
+        tf.keras.backend.clear_session()        
+        
+        # Set-up II - Shapes 
+        input_shape = X_train.shape[1:]
+        output_shape = Y_train.shape[1:]
+        
+        # Create autoencoder model
+        autoencoder, encoder, decoder = create_autoencoder(input_shape, output_shape, config)
+        
+        # Callbacks
+        early_stop = tf.keras.callbacks.EarlyStopping(monitor='val_loss', patience=config['patience'], 
+                                                      restore_best_weights = True)
+        
+        # Report model summary
+        autoencoder.summary()
+        # Report model summary
+        encoder.summary()
+        
+        # Fit model       
+        history = autoencoder.fit(X_train, Y_train,
+                                  batch_size=config['batch_size'], 
+                                  epochs=config['epochs'], 
+                                  callbacks=[early_stop],
+                                  validation_data=(X_val, Y_val),
+                                  verbose=1)   
+        
+        # Summarize history for loss
+        plt.clf()
+        plt.plot(history.history['loss'])
+        plt.plot(history.history['val_loss'])
+        plt.title('model loss')
+        plt.ylabel('loss')
+        plt.xlabel('epoch')
+        plt.legend(['train', 'val'], loc='upper left')
+        plt.show()
+
+        # Save encoder model
+        encoder.save(OUTFOLDER + 'model_E_' + str(label) + '.h5')
+        print('')
+        print("Saved Encoder model to disk")
+        
+        # Save auteoencoder model
+        autoencoder.save(OUTFOLDER + 'model_AE_' + str(label) + '.h5')
+        print('')
+        print("Saved AutoEncoder model to disk")
+        
+        # Save decoder model
+        decoder.save(OUTFOLDER + 'model_D_' + str(label) + '.h5')
+        print('')
+        print("Saved Decoder model to disk")     
+        
+    else:
+        # Autoencoder
+        autoencoder= tf.keras.models.load_model(OUTFOLDER + 'model_AE_' + str(label) + '.h5')
+        print('')
+        print("Loaded Autoencoder model from disk")
+        
+        # Report model summary
+        autoencoder.summary()
+        
+        # Compilation
+        autoencoder.compile(optimizer='Adam', loss="mean_squared_error") 
+        
+    # Evaluate model      
+    loss_val = autoencoder.evaluate(x=X_val, y=Y_val)
+    
+    # Predict outputs
+    Y_hat_train = autoencoder.predict(x=X_train)
+    Y_hat_val = autoencoder.predict(x=X_val)
+    Y_hat_test = autoencoder.predict(x=X_test)
+
+    return loss_val, Y_hat_train, Y_hat_val, Y_hat_test
+
+# 
+def grid_search_ul(MODEL_PATH,
+                   X_train, Y_train, 
+                   X_val, Y_val,
+                   X_test, Y_test, 
+                   params, n_runs, varInput, generate=True):
+    """
+    Performs a grid search in a NN with unsupervised learning strategy: 
+    define model shapes, create model, fit model, plot training loss and save model
+    inputs:
+        MODEL_PATH: path to storage or model folder.
+        X_{train, val, test}: np.array with train, val and test input features.
+        params: dictionary, NN possible configurations.
+        n_runs: int, each configuration is performed n_runs times.
+        varInput: str with mapping label.
+        generate_a: boolean with load or run.
+    outputs:
+        df: storage dataframe.
+        log_label: list of unique model labels.
+    """
+    # Set-up
+    df = pd.DataFrame()
+    log_loss_val, log_label, log_df = [], [], []
+    keys, values = zip(*params.items())
+
+    for kk, bundle in enumerate(product(*values)):        # Varing architectures
+        
+        # Architecture [kk]
+        config = dict(zip(keys, bundle))
+
+        for jj in range(n_runs):                         # Check reproducibility - n runs             
+            df_k = pd.DataFrame(config, index=[0])
+           
+            # Define simulation label
+            label =  varInput + '_h_a_' + str(kk) + '_run_' + str(jj)
+            print('')
+            print('Simulation:', label)
+
+            # Fit NN model
+            time_start = time.time()
+            loss_val, Y_hat_train, Y_hat_val, Y_hat_test =\
+            fit_model_ul(MODEL_PATH,
+                           X_train, Y_train, 
+                           X_val, Y_val,
+                           X_test, Y_test,
+                           config, label, generate=generate)
+            
+            # Store results
+            log_loss_val.append(loss_val)
+            log_label.append(label)
+
+            # Log architecture/run/results as pandas DataFrame
+            df_k['run']= jj
+            df_k['RMSE-Ts'] = np.round(np.sqrt(np.mean((Y_hat_test - Y_test)**2)), 3)
+            df_k['RMSE-Va'] = np.round(np.sqrt(np.mean((Y_hat_val - Y_val)**2)), 3)
+            df_k['RMSE-Tr'] = np.round(np.sqrt(np.mean((Y_hat_train - Y_train)**2)), 3)
+            df_k['Time[min]'] = np.round((time.time()-time_start)/60, 2)            
+            log_df.append(df_k)
+            df = pd.concat(log_df, ignore_index=True)
+
+            print('')
+            print(df.to_string())
+
+            # Write solutions to 
+            df.to_csv(MODEL_PATH + 'Training_US_' +  varInput + '.csv')
+
+    return df, log_label, log_loss_val
+
+
+
+####################################################################################
+if __name__ == '__main__':
+
+    # main 
+
+    # load parameter yaml
+    with open("test.yaml") as stream:
+        param = yaml.safe_load(stream)
+
+    # laod base directory list
+    dirs = sorted(glob.glob(os.path.abspath("{base}/*/*/*".format(base=param["base_directory"]))))
+
+    # initialize visualizer
+    visualizer = Visualizer()
+
+    # setup the result
+    result_file = "{result}/{file_name}".format(result=param["result_directory"], file_name=param["result_file"])
+    results = {}
+
+    for dir_idx, target_dir in enumerate(dirs):
+        print("\n[{num}/{total}] {dirname}".format(dirname=target_dir, num=dir_idx + 1, total=len(dirs)))
+     
+        # dataset param        
+        db = os.path.split(os.path.split(os.path.split(target_dir)[0])[0])[1]
+        machine_type = os.path.split(os.path.split(target_dir)[0])[1]
+        machine_id = os.path.split(target_dir)[1]
+
+        # setup path
+        evaluation_result = {}
+        train_pickle = "{pickle}/train_{machine_type}_{machine_id}_{db}.pickle".format(pickle=param["pickle_directory"],
+                                                                                       machine_type=machine_type,
+                                                                                       machine_id=machine_id, db=db)
+        eval_pickle = "{pickle}/eval_{machine_type}_{machine_id}_{db}.pickle".format(pickle=param["pickle_directory"],
+                                                                                       machine_type=machine_type,
+                                                                                       machine_id=machine_id, db=db)
+        eval_files_pickle = "{pickle}/eval_files_{machine_type}_{machine_id}_{db}.pickle".format(
+                                                                                       pickle=param["pickle_directory"],
+                                                                                       machine_type=machine_type,
+                                                                                       machine_id=machine_id,
+                                                                                       db=db)
+        eval_labels_pickle = "{pickle}/eval_labels_{machine_type}_{machine_id}_{db}.pickle".format(
+                                                                                       pickle=param["pickle_directory"],
+                                                                                       machine_type=machine_type,
+                                                                                       machine_id=machine_id,
+                                                                                       db=db)
+        model_file = "{model}/model_{machine_type}_{machine_id}_{db}.hdf5".format(model=param["model_directory"],
+                                                                                  machine_type=machine_type,
+                                                                                  machine_id=machine_id,
+                                                                                  db=db)
+        history_img = "{model}/history_{machine_type}_{machine_id}_{db}.png".format(model=param["model_directory"],
+                                                                                    machine_type=machine_type,
+                                                                                    machine_id=machine_id,
+                                                                                    db=db)
+        evaluation_result_key = "{machine_type}_{machine_id}_{db}".format(machine_type=machine_type,
+                                                                          machine_id=machine_id,
+                                                                          db=db)
+
+        # generate dataset
+        if os.path.exists(train_pickle) and os.path.exists(eval_pickle) and os.path.exists(eval_files_pickle) and os.path.exists(eval_labels_pickle):
+            train_data = load_pickle(train_pickle)
+            eval_data = load_pickle(eval_pickle)
+            eval_files = load_pickle(eval_files_pickle)
+            eval_labels = load_pickle(eval_labels_pickle)
+
+        else:        
+            print("Generating dataset")
+            train_files, train_labels, eval_files, eval_labels = dataset_generator(target_dir)
+
+            train_data = dataloader(train_files,
+                                    n_fft = param['feature']['n_fft'],
+                                    hop_length = param['feature']['hop_length'],
+                                    n_mels = param['feature']['n_mels'],
+                                    frames = param['feature']['frames'],
+                                    pwr = param['feature']['power'],
+                                    msg="Training data: ")
+            
+            eval_data = dataloader(eval_files,
+                        n_fft = param['feature']['n_fft'],
+                        hop_length = param['feature']['hop_length'],
+                        n_mels = param['feature']['n_mels'],
+                        frames = param['feature']['frames'],
+                        pwr = param['feature']['power'],
+                        msg="Evaluation data: ")
+            
+            print(train_data)
+            print(np.shape(train_data))
+            save_pickle(train_pickle, train_data)
+            save_pickle(eval_pickle, eval_data)
+            save_pickle(eval_files_pickle, eval_files)
+            save_pickle(eval_labels_pickle, eval_labels)
+
+        # model training
+        print("model training")
+        # create autoencoder
+        autoencoder, encoder, decoder = create_autoencoder(train_data.shape[1:], 
+                                                           train_data.shape[1:], 
+                                                           param['config'])
+        
+        # Callbacks
+        early_stop = tf.keras.callbacks.EarlyStopping(monitor='val_loss', patience=param['config']['patience'], 
+                                                      restore_best_weights = True)
+
+        # report model summary
+        autoencoder.summary()
+        # report model summary
+        encoder.summary()
+
+        if os.path.exists(model_file):
+            autoencoder.load(model_file)
+        else:
+            history = autoencoder.fit(train_data, train_data,
+                                    batch_size = param['config']['batch_size'],
+                                    epochs = param['config']['epochs'],
+                                    callbacks = [early_stop],
+                                    validation_data = (eval_data, eval_data))
+            
+            visualizer.loss_plot(history.history['loss'], history.history['val_loss'])
+            visualizer.save_figure(history_img)
+            autoencoder.save(model_file)
+
