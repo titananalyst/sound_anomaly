@@ -16,6 +16,7 @@ import itertools
 import pandas as pd
 import seaborn as sns
 import tensorflow as tf
+from sklearn import metrics
 from pandas import DataFrame
 from itertools import product
 from matplotlib import gridspec
@@ -76,6 +77,15 @@ class Visualizer(object):
         ax.set_xlabel("Epoch")
         ax.set_ylabel("Loss")
         ax.legend(loc="upper right")
+
+    def recon_plot(self, data):
+        ax = self.fig.add_subplot(1, 1, 1)
+        ax.cla()
+        ax.scatter(range(len(data)), data)
+        ax.set_xlabel('Sample Index')
+        ax.set_ylabel('Reconstruction Error')
+        ax.set_title('Reconstruction Error Scatter Plot')
+        # plt.show()
 
     def save_figure(self, name):
         """
@@ -149,6 +159,22 @@ def dataloader(files_list, n_fft=1024, hop_length=512, n_mels=64, frames=5, pwr=
         
     return dataset
         
+def file_dataloader(file_name, n_fft=1024, hop_length=512, n_mels=64, frames=5, pwr=2, msg='Dataloader: '):
+    """
+    Function for loading and extracting features form single files.
+    """
+    signal, sr = file_load(file_name)
+    features = extract_features(
+    signal,
+    sr,
+    n_fft=n_fft,
+    hop_length=hop_length,
+    n_mels=n_mels,
+    frames=frames,
+    power=pwr)
+        
+    return features
+
 
 def file_load(wav_name, mono=False, channel=0):
     signal, sr = librosa.load(wav_name, mono=mono, sr=None)
@@ -437,12 +463,16 @@ def create_autoencoder(input_shape, output_shape, config):
     autoencoder = tf.keras.Model(X_inputs, X_hat, name='ae')    
 
     # Optimiser set-up
-    opt = tf.keras.optimizers.legacy.Adam(learning_rate=0.001, beta_1=0.9, beta_2=0.999, epsilon=None, decay=0.0, amsgrad=True)
+    opt = tf.keras.optimizers.legacy.Adam(learning_rate=0.001, beta_1=0.9, beta_2=0.999, epsilon=None, decay=1e-6, amsgrad=True)
     
     # Compilation
     autoencoder.compile(optimizer=opt, loss="mean_squared_error")
     
     return autoencoder, encoder, decoder
+
+
+def predict():
+    pass
 
 
 def fit_model_ul(OUTFOLDER, 
@@ -614,7 +644,8 @@ def grid_search_ul(MODEL_PATH,
 
 ####################################################################################
 if __name__ == '__main__':
-
+    one_machine = True
+    normalization = True
     # main 
 
     # load parameter yaml
@@ -623,6 +654,11 @@ if __name__ == '__main__':
 
     # laod base directory list
     dirs = sorted(glob.glob(os.path.abspath("{base}/*/*/*".format(base=param["base_directory"]))))
+
+    if one_machine == True:
+        # dirs = [dirs[0]]
+        dirs = ['Z:\\BA\\mimii_baseline\\dataset\\0dB\\pump\\id_06']
+        print(dirs)
 
     # initialize visualizer
     visualizer = Visualizer()
@@ -665,6 +701,10 @@ if __name__ == '__main__':
                                                                                     machine_type=machine_type,
                                                                                     machine_id=machine_id,
                                                                                     db=db)
+        recon_img = "{model}/recon_error_{machine_type}_{machine_id}_{db}.png".format(model=param["model_directory"],
+                                                                                    machine_type=machine_type,
+                                                                                    machine_id=machine_id,
+                                                                                    db=db)
         evaluation_result_key = "{machine_type}_{machine_id}_{db}".format(machine_type=machine_type,
                                                                           machine_id=machine_id,
                                                                           db=db)
@@ -695,7 +735,9 @@ if __name__ == '__main__':
                         frames = param['feature']['frames'],
                         pwr = param['feature']['power'],
                         msg="Evaluation data: ")
-            
+            if normalization == True:
+                train_data, _, _ = normalize_data(train_data, [], [], max_v=1.0, min_v=0.0)
+                eval_data, _, _ = normalize_data(eval_data, [], [], max_v=1.0, min_v=0.0)
             print(train_data)
             print(np.shape(train_data))
             save_pickle(train_pickle, train_data)
@@ -720,15 +762,65 @@ if __name__ == '__main__':
         encoder.summary()
 
         if os.path.exists(model_file):
-            autoencoder.load(model_file)
+            autoencoder = tf.keras.models.load_model(model_file)
         else:
             history = autoencoder.fit(train_data, train_data,
                                     batch_size = param['config']['batch_size'],
                                     epochs = param['config']['epochs'],
                                     callbacks = [early_stop],
-                                    validation_data = (eval_data, eval_data))
+                                    # validation_data = (eval_data, eval_data)
+                                    validation_split = 0.1)
             
             visualizer.loss_plot(history.history['loss'], history.history['val_loss'])
             visualizer.save_figure(history_img)
             autoencoder.save(model_file)
 
+
+        # model evaluation
+        print('evaluation')
+        y_pred = [0. for k in eval_labels]
+        y_true = eval_labels
+
+        for num, file in tqdm(enumerate(eval_files), total = len(eval_files)):
+            try:
+                data = file_dataloader(file,
+                                n_fft = param['feature']['n_fft'],
+                                hop_length = param['feature']['hop_length'],
+                                n_mels = param['feature']['n_mels'],
+                                frames = param['feature']['frames'],
+                                pwr = param['feature']['power'])
+                if normalization == True:
+                    data, _, _ = normalize_data(data, [], [], max_v=1.0, min_v=0.0)
+                error = np.mean(np.square(data-autoencoder.predict(data)), axis=1)
+                y_pred[num] = np.mean(error)
+
+            except:
+                print('File broken)')
+
+        print('error', error)
+        print(np.shape(error))
+        print('y_pred', y_pred)
+        print(np.shape(y_pred))
+
+        # AUC
+        score = metrics.roc_auc_score(y_true, y_pred)
+        print("AUC : {}".format(score))
+        evaluation_result["AUC"] = float(score)
+        
+
+        # F1
+        threshold = np.median(y_pred)
+        y_pred_binary = [1 if pred > threshold else 0 for pred in y_pred]
+        f1_score = metrics.f1_score(y_true, y_pred_binary)
+        print("F1 Score : {}".format(f1_score))
+        evaluation_result["F1"] = float(f1_score)
+
+        results[evaluation_result_key] = evaluation_result
+
+        visualizer.recon_plot(error)
+        visualizer.save_figure(recon_img)
+        
+
+
+    with open(result_file, "w") as f:
+            f.write(yaml.dump(results, default_flow_style=False))

@@ -1,7 +1,7 @@
 base_directory : Z:\\BA\\mimii_baseline\\dataset
 pickle_directory: ./pickle/test
-model_directory: ./model/mimii
-result_directory: ./result
+model_directory: ./models/mimii
+result_directory: ./results
 result_file: result.yaml
 
 feature:
@@ -24,10 +24,10 @@ fit:
 config: 
   activ: relu      # Activation - h1 = ['tanh', 'relu']
   n_hl_a: 4          # Number of hidden layers - h2 = [1, 2, 3]
-  n_cl_a: 100         # Initial number of channels (halves for each hidden layer) - h3 = [10, 20, 50]   
+  n_cl_a: 64         # Initial number of channels (halves for each hidden layer) - h3 = [10, 20, 50]   
   n_ls_a: 4          # Latent space z dimensions - h5 = [6, 8, 10, 12, 14, 16, 18]  
-  batch_size: 128    # Batch size autoencoder - h6 = [64, 128, 512, 1024]    
-  epochs: 50         # Epochs - h7 (on demand)
+  batch_size: 64    # Batch size autoencoder - h6 = [64, 128, 512, 1024]    
+  epochs: 100         # Epochs - h7 (on demand)
   seed: 229          # Seed number
   patience: 15
         
