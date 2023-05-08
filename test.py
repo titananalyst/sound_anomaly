@@ -24,7 +24,7 @@ from itertools import product
 from matplotlib import gridspec
 from operator import itemgetter
 from tqdm import tqdm
-from time import gmtime, strftime
+from time import localtime, gmtime, strftime
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import precision_recall_curve
 from sklearn.metrics import PrecisionRecallDisplay
@@ -62,7 +62,7 @@ class Visualizer(object):
         self.fig = plt.figure(figsize=(30, 10))
         plt.subplots_adjust(wspace=0.3, hspace=0.3)
 
-    def loss_plot(self, loss, val_loss):
+    def loss_plot(self, loss, val_loss, label):
         """
         Plot loss curve.
 
@@ -77,37 +77,42 @@ class Visualizer(object):
         ax.cla()
         ax.plot(loss, label="Train")
         ax.plot(val_loss, label="Test")
-        ax.set_title("Model loss", fontsize=22)
+        ax.set_title(f'Model loss - {label}', fontsize=22)
         ax.set_xlabel("Epoch", fontsize=22)
         ax.set_ylabel("Loss", fontsize=22)
         ax.legend(loc="upper right", fontsize=22)
         ax.tick_params(axis='both', labelsize=22)
 
-    def recon_plot(self, data):
+    def recon_plot(self, data, label, n_abnorm):
+        """
+        input:  data:   y_pred as reconstruction error of all files
+                label:  machine type, id and db
+                n_abnorm: number of abnormal files for the train eval split
+        """
         ax = self.fig.add_subplot(1, 1, 1)
         ax.cla()
-        # ax.scatter(range(len(train)), data[:len(train)])
-        # ax.scatter(range(len(train, eval+1)), data[len(train):])
-        ax.scatter(range(len(data)), data)
-        ax.set_xlabel('Recall', fontsize=22)
-        ax.set_ylabel('Precision', fontsize=22)
-        ax.set_title('Precision Recall Curve - Test set', fontsize=22)
+        ax.scatter(np.arange(len(data[:n_abnorm])), data[:n_abnorm], label='normal')
+        ax.scatter(np.arange(len(data[n_abnorm:])) + n_abnorm, data[n_abnorm:], label='abnormal')
+        ax.set_title(f'Reconstruction Error - {label}', fontsize=22)
+        ax.set_xlabel('File Index', fontsize=22)
+        ax.set_ylabel('Reconstruction Error', fontsize=22)
+        ax.legend(loc="upper left", fontsize=22)
         ax.tick_params(axis='both', labelsize=22)
 
-    def pr_curve_plot(self, true, pred):
+    def pr_curve_plot(self, true, pred, label):
         # precision recall curve
         ax = self.fig.add_subplot(1,1,1)
         ax.cla()
         precision, recall, _ = precision_recall_curve(true, pred)
-        print(np.shape(precision), np.shape(recall))
-        print(precision, recall)
+        # print(np.shape(precision), np.shape(recall))
+        # print(precision, recall)
         prd = PrecisionRecallDisplay(precision, recall)
         prd.plot(ax=ax)
-        ax.set_xlabel('Sample Index', fontsize=22)
-        ax.set_ylabel('Reconstruction Error', fontsize=22)
-        ax.set_title('Reconstruction Error - Test set', fontsize=22)
+        ax.set_xlabel('Recall', fontsize=22)
+        ax.set_ylabel('Precision', fontsize=22)
+        ax.set_title(f'Precision Recall Curve - {label}', fontsize=22)
         ax.tick_params(axis='both', labelsize=22)
-
+        
     def save_figure(self, name):
         """
         Save figure.
@@ -119,7 +124,7 @@ class Visualizer(object):
         """
         self.fig.savefig(name)
         print('Image saved!')
-        self.fig.clf(True)
+        self.fig.clf()
 
 
 ####################################################################################
@@ -385,9 +390,14 @@ def dataset_generator(target_dir,
     eval_files = np.concatenate((normal_files[:len(abnormal_files)], abnormal_files), axis=0)
     eval_labels = np.concatenate((normal_labels[:len(abnormal_files)], abnormal_labels), axis=0)
     logger.info("train_file num : {num}".format(num=len(train_files)))
+    logger.info("train_labels num : {num}".format(num=len(train_labels)))
     logger.info("eval_file  num : {num}".format(num=len(eval_files)))
+    logger.info("eval_labels  num : {num}".format(num=len(eval_labels)))
 
-    return train_files, train_labels, eval_files, eval_labels
+    len_norm = len(normal_files)
+    len_abnorm = len(abnormal_files)
+
+    return train_files, train_labels, eval_files, eval_labels, len_norm, len_abnorm
 
 ####################################################################################
 # evaluation
@@ -574,10 +584,11 @@ def fit_model_ul(OUTFOLDER,
         plt.clf()
         plt.plot(history.history['loss'])
         plt.plot(history.history['val_loss'])
-        plt.title('model loss')
-        plt.ylabel('loss')
-        plt.xlabel('epoch')
-        plt.legend(['train', 'val'], loc='upper left')
+        plt.title(f'model loss - {label}', fontsize=22)
+        plt.ylabel('loss', fontsize=22)
+        plt.xlabel('epoch', fontsize=22)
+        plt.legend(['train', 'val'], loc='upper left', fontsize=22)
+        plt.tick_params(axis='both', labelsize=22)
         plt.savefig('D:/9999_OneDrive_ZHAW/OneDrive - ZHAW/BA_ZHAW_RTO/img/loss/' + str(label) + '_' + strftime("%Y-%m-%d", gmtime()) +'.png')
         plt.clf()
         # plt.show()
@@ -692,10 +703,11 @@ def grid_search_ul(MODEL_PATH,
 ####################################################################################
 if __name__ == '__main__':
     one_machine = True
-    result_file = False
+    result_file = True
     normalization = True
     grid_search = True
-    gen = False
+    gen = True
+    grid_runs = 2
     
 
     # main 
@@ -756,6 +768,11 @@ if __name__ == '__main__':
                                                                                        machine_type=machine_type,
                                                                                        machine_id=machine_id,
                                                                                        db=db)
+        n_norm_abnorm_pickle = "{pickle}/n_norm_abnorm_{machine_type}_{machine_id}_{db}.pickle".format(
+                                                                                       pickle=param["pickle_directory"],
+                                                                                       machine_type=machine_type,
+                                                                                       machine_id=machine_id,
+                                                                                       db=db)
         model_file = "{model}/model_{machine_type}_{machine_id}_{db}.hdf5".format(model=param["model_directory"],
                                                                                   machine_type=machine_type,
                                                                                   machine_id=machine_id,
@@ -783,17 +800,18 @@ if __name__ == '__main__':
         evaluation_result['Config'] = param['config']
 
         # generate dataset
-        if os.path.exists(train_pickle) and os.path.exists(train_labels_pickle) and os.path.exists(train_files_pickle) and os.path.exists(eval_pickle) and os.path.exists(eval_files_pickle) and os.path.exists(eval_labels_pickle):
+        if os.path.exists(train_pickle) and os.path.exists(train_labels_pickle) and os.path.exists(train_files_pickle) and os.path.exists(eval_pickle) and os.path.exists(eval_files_pickle) and os.path.exists(eval_labels_pickle) and os.path.exists(n_norm_abnorm_pickle):
             train_data = load_pickle(train_pickle)
             train_files = load_pickle(train_files_pickle)
             train_labels = load_pickle(train_labels_pickle)
             eval_data = load_pickle(eval_pickle)
             eval_files = load_pickle(eval_files_pickle)
             eval_labels = load_pickle(eval_labels_pickle)
+            n_norm_abnorm =load_pickle(n_norm_abnorm_pickle)
 
         else:        
             print("Generating dataset")
-            train_files, train_labels, eval_files, eval_labels = dataset_generator(target_dir)
+            train_files, train_labels, eval_files, eval_labels, n_norm, n_abnorm = dataset_generator(target_dir)
 
             train_data = dataloader(train_files,
                                     n_fft = param['feature']['n_fft'],
@@ -813,6 +831,9 @@ if __name__ == '__main__':
             if normalization == True:
                 train_data, _, _ = normalize_data(train_data, [], [], max_v=1.0, min_v=0.0)
                 eval_data, _, _ = normalize_data(eval_data, [], [], max_v=1.0, min_v=0.0)
+            
+            n_norm_abnorm = (n_norm, n_abnorm)
+            
             print(train_data)
             print(np.shape(train_data))
             save_pickle(train_pickle, train_data)
@@ -821,31 +842,33 @@ if __name__ == '__main__':
             save_pickle(eval_pickle, eval_data)
             save_pickle(eval_files_pickle, eval_files)
             save_pickle(eval_labels_pickle, eval_labels)
+            save_pickle(n_norm_abnorm_pickle, n_norm_abnorm)
+
 
         ###############################################################
         # grid search approach
         # Working folder: storage
         if grid_search == True:
             ROOT_PATH_2 = 'models/99-AE-MIMII'
-            MODEL_PATH_2 = ROOT_PATH_2 + '/' + strftime("%Y-%m-%d", gmtime()) + '/'
+            MODEL_PATH_2 = ROOT_PATH_2 + '/' + strftime("%Y-%m-%d", localtime()) + '/'
             # MODEL_PATH_2 = ROOT_PATH_2 + '/' + '2023-05-07' + '/'  # date customizable
-
+            print(MODEL_PATH_2)
 
             if not os.path.exists(MODEL_PATH_2):
                 os.makedirs(MODEL_PATH_2)
-            print(param['config_grid'])
+            # print(param['config_grid'])
             # Fit model
             df, log_label_2, log_loss_val = grid_search_ul(MODEL_PATH_2,
                                             train_data, train_data, 
                                             eval_data, eval_data,
                                             eval_data, eval_data,
-                                            param['config_grid'], 2, evaluation_result_key, 
+                                            param['config_grid'], grid_runs, evaluation_result_key, 
                                             generate=gen)
             
             # evaluation
             autoencoder = best_model_ae(log_loss_val, log_label_2, MODEL_PATH_2)
 
-            print('evaluation')
+            print('evaluation grid_search')
             y_pred = [0. for k in eval_labels]
             y_true = eval_labels
 
@@ -865,10 +888,10 @@ if __name__ == '__main__':
                 except:
                     print('File broken)')
 
-            print('error', error)
-            print(np.shape(error))
-            print('y_pred', y_pred)
-            print(np.shape(y_pred))
+            # print('error', error)
+            # print(np.shape(error))
+            # print('y_pred', y_pred)
+            # print(np.shape(y_pred))
 
 
             # threshold with kmeans clustering
@@ -894,12 +917,13 @@ if __name__ == '__main__':
 
             results[evaluation_result_key] = evaluation_result
 
-            visualizer.recon_plot(error)
-            visualizer.save_figure('D:/9999_OneDrive_ZHAW/OneDrive - ZHAW/BA_ZHAW_RTO/img/recon/' + str(machine_type) + '_' + str(machine_id) + '_' + str(db) + '.png')
+            visualizer.recon_plot(y_pred, evaluation_result_key, n_norm_abnorm[1])
+            visualizer.save_figure('D:/9999_OneDrive_ZHAW/OneDrive - ZHAW/BA_ZHAW_RTO/img/recon/' + evaluation_result_key + '.png')
 
             # precision recall curve
-            visualizer.pr_curve_plot(y_true, y_pred)
-            visualizer.save_figure('D:/9999_OneDrive_ZHAW/OneDrive - ZHAW/BA_ZHAW_RTO/img/pr_curve/' + str(machine_type) + '_' + str(machine_id) + '_' + str(db) + '.png')
+            visualizer.pr_curve_plot(y_true, y_pred, evaluation_result_key)
+            visualizer.save_figure('D:/9999_OneDrive_ZHAW/OneDrive - ZHAW/BA_ZHAW_RTO/img/pr_curve/' + evaluation_result_key + '.png')
+
 
         ###############################################################
         # normal approach without grid_search
@@ -930,7 +954,7 @@ if __name__ == '__main__':
                                     # validation_data = (eval_data, eval_data)
                                     validation_split = 0.1)
             
-            visualizer.loss_plot(history.history['loss'], history.history['val_loss'])
+            visualizer.loss_plot(history.history['loss'], history.history['val_loss'], evaluation_result_key)
             visualizer.save_figure(history_img)
             autoencoder.save(model_file)
 
@@ -952,6 +976,7 @@ if __name__ == '__main__':
                     data, _, _ = normalize_data(data, [], [], max_v=1.0, min_v=0.0)
                 error = np.mean(np.square(data - autoencoder.predict(data)), axis=1)
                 y_pred[num] = np.mean(error)
+        
 
             except:
                 print('File broken)')
@@ -985,11 +1010,11 @@ if __name__ == '__main__':
 
         results[evaluation_result_key] = evaluation_result
 
-        visualizer.recon_plot(error)
+        visualizer.recon_plot(y_pred, evaluation_result_key, n_norm_abnorm[1])
         visualizer.save_figure(recon_img)
 
         # precision recall curve
-        visualizer.pr_curve_plot(y_true, y_pred)
+        visualizer.pr_curve_plot(y_true, y_pred, evaluation_result_key)
         visualizer.save_figure(pr_curve_img)
 
     if result_file == True:
