@@ -7,22 +7,22 @@ pump_id_00_6dB:
     n_cl_a: 64
     n_hl_a: 4
     n_ls_a: 6
-    patience: 15
+    patience: 100
     seed: 229
-  Date_Time: 08/05/2023 11:40:10
+  Date_Time: 08/05/2023 17:55:29
   F1: 0.5544554455445545
 pump_id_02_6dB:
   AUC: 0.2976219462705949
   Config: *id001
-  Date_Time: 08/05/2023 11:57:52
+  Date_Time: 08/05/2023 17:57:19
   F1: 0.5369127516778524
 pump_id_04_6dB:
   AUC: 0.4766
   Config: *id001
-  Date_Time: 08/05/2023 12:50:44
+  Date_Time: 08/05/2023 17:58:51
   F1: 0.5350877192982457
 pump_id_06_6dB:
   AUC: 0.8379469434832757
   Config: *id001
-  Date_Time: 08/05/2023 13:10:43
+  Date_Time: 08/05/2023 18:00:30
   F1: 0.7457627118644068

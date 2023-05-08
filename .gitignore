@@ -11,3 +11,4 @@
 *.pickle
 *.ipynb_checkpoints
 *.hdf5
+*.log

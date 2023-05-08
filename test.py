@@ -89,6 +89,20 @@ class Visualizer(object):
         # ax.scatter(range(len(train)), data[:len(train)])
         # ax.scatter(range(len(train, eval+1)), data[len(train):])
         ax.scatter(range(len(data)), data)
+        ax.set_xlabel('Recall', fontsize=22)
+        ax.set_ylabel('Precision', fontsize=22)
+        ax.set_title('Precision Recall Curve - Test set', fontsize=22)
+        ax.tick_params(axis='both', labelsize=22)
+
+    def pr_curve_plot(self, true, pred):
+        # precision recall curve
+        ax = self.fig.add_subplot(1,1,1)
+        ax.cla()
+        precision, recall, _ = precision_recall_curve(true, pred)
+        print(np.shape(precision), np.shape(recall))
+        print(precision, recall)
+        prd = PrecisionRecallDisplay(precision, recall)
+        prd.plot(ax=ax)
         ax.set_xlabel('Sample Index', fontsize=22)
         ax.set_ylabel('Reconstruction Error', fontsize=22)
         ax.set_title('Reconstruction Error - Test set', fontsize=22)
@@ -104,7 +118,8 @@ class Visualizer(object):
         return : None
         """
         self.fig.savefig(name)
-        self.fig.clf()
+        print('Image saved!')
+        self.fig.clf(True)
 
 
 ####################################################################################
@@ -375,6 +390,27 @@ def dataset_generator(target_dir,
     return train_files, train_labels, eval_files, eval_labels
 
 ####################################################################################
+# evaluation
+
+def best_model_ae(log_loss, log_label, path):
+    """
+    input:  log_loss_val
+            log_label_2
+            path: MODEL_PATH_2
+    """
+    # Select model with best loss on validation set!!
+    log_loss = np.array(log_loss)
+    mask = np.ravel(log_loss==min(log_loss))
+    label = list(itertools.compress(log_label, mask))[0]
+    print('Loaded Model: ', label)
+
+    model = tf.keras.models.load_model(path + 'model_AE_' + str(label) + '.h5')
+    # X_hat_train = model.predict(x=X_train)
+    # X_hat_val = model.predict(x=X_val)
+    # X_hat_test = model.predict(x=X_test)
+    return model
+
+####################################################################################
 # Model
 ####################################################################################
 
@@ -583,7 +619,7 @@ def fit_model_ul(OUTFOLDER,
 
     return loss_val, Y_hat_train, Y_hat_val, Y_hat_test
 
-# 
+
 def grid_search_ul(MODEL_PATH,
                    X_train, Y_train, 
                    X_val, Y_val,
@@ -656,7 +692,12 @@ def grid_search_ul(MODEL_PATH,
 ####################################################################################
 if __name__ == '__main__':
     one_machine = True
+    result_file = False
     normalization = True
+    grid_search = True
+    gen = False
+    
+
     # main 
 
     # load parameter yaml
@@ -668,6 +709,7 @@ if __name__ == '__main__':
 
     if one_machine == True:
         # dirs = [dirs[0]]
+        # dirs = ['Z:\\BA\\mimii_baseline\\dataset\\6dB\\pump\\id_00']
         dirs = ['Z:\\BA\\mimii_baseline\\dataset\\6dB\\pump\\id_00', 'Z:\\BA\\mimii_baseline\\dataset\\6dB\\pump\\id_02', 'Z:\\BA\\mimii_baseline\\dataset\\6dB\\pump\\id_04', 'Z:\\BA\\mimii_baseline\\dataset\\6dB\\pump\\id_06']
         print(dirs)
 
@@ -726,6 +768,10 @@ if __name__ == '__main__':
                                                                                     machine_type=machine_type,
                                                                                     machine_id=machine_id,
                                                                                     db=db)
+        pr_curve_img = "{model}/pr_curve_{machine_type}_{machine_id}_{db}.png".format(model=param["model_directory"],
+                                                                                    machine_type=machine_type,
+                                                                                    machine_id=machine_id,
+                                                                                    db=db)
         evaluation_result_key = "{machine_type}_{machine_id}_{db}".format(machine_type=machine_type,
                                                                           machine_id=machine_id,
                                                                           db=db)
@@ -779,23 +825,85 @@ if __name__ == '__main__':
         ###############################################################
         # grid search approach
         # Working folder: storage
-        ROOT_PATH_2 = 'models/99-AE-MIMII'
-        MODEL_PATH_2 = ROOT_PATH_2 + '/' + strftime("%Y-%m-%d", gmtime()) + '/'
-        # MODEL_PATH_2 = ROOT_PATH_2 + '/' + '2023-05-07' + '/'  # date customizable
+        if grid_search == True:
+            ROOT_PATH_2 = 'models/99-AE-MIMII'
+            MODEL_PATH_2 = ROOT_PATH_2 + '/' + strftime("%Y-%m-%d", gmtime()) + '/'
+            # MODEL_PATH_2 = ROOT_PATH_2 + '/' + '2023-05-07' + '/'  # date customizable
 
 
-        if not os.path.exists(MODEL_PATH_2):
-            os.makedirs(MODEL_PATH_2)
-        print(param['config_grid'])
-        # Fit model
-        df, log_label_2, log_loss_val = grid_search_ul(MODEL_PATH_2,
-                                        train_data, train_data, 
-                                        eval_data, eval_data,
-                                        eval_data, eval_data,
-                                        param['config_grid'], 2, evaluation_result_key, 
-                                        generate=True)
+            if not os.path.exists(MODEL_PATH_2):
+                os.makedirs(MODEL_PATH_2)
+            print(param['config_grid'])
+            # Fit model
+            df, log_label_2, log_loss_val = grid_search_ul(MODEL_PATH_2,
+                                            train_data, train_data, 
+                                            eval_data, eval_data,
+                                            eval_data, eval_data,
+                                            param['config_grid'], 2, evaluation_result_key, 
+                                            generate=gen)
+            
+            # evaluation
+            autoencoder = best_model_ae(log_loss_val, log_label_2, MODEL_PATH_2)
+
+            print('evaluation')
+            y_pred = [0. for k in eval_labels]
+            y_true = eval_labels
+
+            for num, file in tqdm(enumerate(eval_files), total = len(eval_files)):
+                try:
+                    data = file_dataloader(file,
+                                    n_fft = param['feature']['n_fft'],
+                                    hop_length = param['feature']['hop_length'],
+                                    n_mels = param['feature']['n_mels'],
+                                    frames = param['feature']['frames'],
+                                    pwr = param['feature']['power'])
+                    if normalization == True:
+                        data, _, _ = normalize_data(data, [], [], max_v=1.0, min_v=0.0)
+                    error = np.mean(np.square(data - autoencoder.predict(data)), axis=1)
+                    y_pred[num] = np.mean(error)
+
+                except:
+                    print('File broken)')
+
+            print('error', error)
+            print(np.shape(error))
+            print('y_pred', y_pred)
+            print(np.shape(y_pred))
+
+
+            # threshold with kmeans clustering
+            y_pred_array = np.array(y_pred)
+            y_pred_resh = y_pred_array.reshape(-1, 1)
+            kmeans = KMeans(n_clusters=2, random_state=0).fit(y_pred_resh)
+            centroids = kmeans.cluster_centers_
+            threshold = np.mean(centroids)
+
+
+            # AUC
+            score = metrics.roc_auc_score(y_true, y_pred)
+            print("AUC : {}".format(score))
+            evaluation_result["AUC"] = float(score)
+            
+
+            # F1
+            # threshold = np.median(y_pred)
+            y_pred_binary = [1 if pred > threshold else 0 for pred in y_pred]
+            f1_score = metrics.f1_score(y_true, y_pred_binary)
+            print("F1 Score : {}".format(f1_score))
+            evaluation_result["F1"] = float(f1_score)
+
+            results[evaluation_result_key] = evaluation_result
+
+            visualizer.recon_plot(error)
+            visualizer.save_figure('D:/9999_OneDrive_ZHAW/OneDrive - ZHAW/BA_ZHAW_RTO/img/recon/' + str(machine_type) + '_' + str(machine_id) + '_' + str(db) + '.png')
+
+            # precision recall curve
+            visualizer.pr_curve_plot(y_true, y_pred)
+            visualizer.save_figure('D:/9999_OneDrive_ZHAW/OneDrive - ZHAW/BA_ZHAW_RTO/img/pr_curve/' + str(machine_type) + '_' + str(machine_id) + '_' + str(db) + '.png')
+
         ###############################################################
-        
+        # normal approach without grid_search
+
         # model training
         print("model training")
         # create autoencoder
@@ -842,16 +950,16 @@ if __name__ == '__main__':
                                 pwr = param['feature']['power'])
                 if normalization == True:
                     data, _, _ = normalize_data(data, [], [], max_v=1.0, min_v=0.0)
-                error = np.mean(np.square(data-autoencoder.predict(data)), axis=1)
+                error = np.mean(np.square(data - autoencoder.predict(data)), axis=1)
                 y_pred[num] = np.mean(error)
 
             except:
                 print('File broken)')
 
-        print('error', error)
-        print(np.shape(error))
-        print('y_pred', y_pred)
-        print(np.shape(y_pred))
+        # print('error', error)
+        # print(np.shape(error))
+        # print('y_pred', y_pred)
+        # print(np.shape(y_pred))
 
 
         # threshold with kmeans clustering
@@ -881,9 +989,9 @@ if __name__ == '__main__':
         visualizer.save_figure(recon_img)
 
         # precision recall curve
-        precision, recall, _ = precision_recall_curve(y_true, y_pred)
-        prd = PrecisionRecallDisplay(precision, recall)
-        prd.plot()
+        visualizer.pr_curve_plot(y_true, y_pred)
+        visualizer.save_figure(pr_curve_img)
 
-    with open(result_file, "w") as f:
-            f.write(yaml.dump(results, default_flow_style=False))
+    if result_file == True:
+        with open(result_file, "w") as f:
+                f.write(yaml.dump(results, default_flow_style=False))
