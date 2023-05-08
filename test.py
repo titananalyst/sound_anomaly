@@ -16,7 +16,9 @@ import itertools
 import pandas as pd
 import seaborn as sns
 import tensorflow as tf
+from datetime import datetime
 from sklearn import metrics
+from sklearn.cluster import KMeans
 from pandas import DataFrame
 from itertools import product
 from matplotlib import gridspec
@@ -24,6 +26,8 @@ from operator import itemgetter
 from tqdm import tqdm
 from time import gmtime, strftime
 from sklearn.model_selection import train_test_split
+from sklearn.metrics import precision_recall_curve
+from sklearn.metrics import PrecisionRecallDisplay
 
 import yaml
 import logging
@@ -73,19 +77,22 @@ class Visualizer(object):
         ax.cla()
         ax.plot(loss, label="Train")
         ax.plot(val_loss, label="Test")
-        ax.set_title("Model loss")
-        ax.set_xlabel("Epoch")
-        ax.set_ylabel("Loss")
-        ax.legend(loc="upper right")
+        ax.set_title("Model loss", fontsize=22)
+        ax.set_xlabel("Epoch", fontsize=22)
+        ax.set_ylabel("Loss", fontsize=22)
+        ax.legend(loc="upper right", fontsize=22)
+        ax.tick_params(axis='both', labelsize=22)
 
     def recon_plot(self, data):
         ax = self.fig.add_subplot(1, 1, 1)
         ax.cla()
+        # ax.scatter(range(len(train)), data[:len(train)])
+        # ax.scatter(range(len(train, eval+1)), data[len(train):])
         ax.scatter(range(len(data)), data)
-        ax.set_xlabel('Sample Index')
-        ax.set_ylabel('Reconstruction Error')
-        ax.set_title('Reconstruction Error Scatter Plot')
-        # plt.show()
+        ax.set_xlabel('Sample Index', fontsize=22)
+        ax.set_ylabel('Reconstruction Error', fontsize=22)
+        ax.set_title('Reconstruction Error - Test set', fontsize=22)
+        ax.tick_params(axis='both', labelsize=22)
 
     def save_figure(self, name):
         """
@@ -97,6 +104,7 @@ class Visualizer(object):
         return : None
         """
         self.fig.savefig(name)
+        self.fig.clf()
 
 
 ####################################################################################
@@ -503,7 +511,7 @@ def fit_model_ul(OUTFOLDER,
         
         # Set-up II - Shapes 
         input_shape = X_train.shape[1:]
-        output_shape = Y_train.shape[1:]
+        output_shape = X_train.shape[1:]
         
         # Create autoencoder model
         autoencoder, encoder, decoder = create_autoencoder(input_shape, output_shape, config)
@@ -518,11 +526,12 @@ def fit_model_ul(OUTFOLDER,
         encoder.summary()
         
         # Fit model       
-        history = autoencoder.fit(X_train, Y_train,
+        history = autoencoder.fit(X_train, X_train,
                                   batch_size=config['batch_size'], 
                                   epochs=config['epochs'], 
                                   callbacks=[early_stop],
-                                  validation_data=(X_val, Y_val),
+                                  #validation_data=(X_val, Y_val),
+                                  validation_split=0.1,
                                   verbose=1)   
         
         # Summarize history for loss
@@ -533,7 +542,9 @@ def fit_model_ul(OUTFOLDER,
         plt.ylabel('loss')
         plt.xlabel('epoch')
         plt.legend(['train', 'val'], loc='upper left')
-        plt.show()
+        plt.savefig('D:/9999_OneDrive_ZHAW/OneDrive - ZHAW/BA_ZHAW_RTO/img/loss/' + str(label) + '_' + strftime("%Y-%m-%d", gmtime()) +'.png')
+        plt.clf()
+        # plt.show()
 
         # Save encoder model
         encoder.save(OUTFOLDER + 'model_E_' + str(label) + '.h5')
@@ -563,7 +574,7 @@ def fit_model_ul(OUTFOLDER,
         autoencoder.compile(optimizer='Adam', loss="mean_squared_error") 
         
     # Evaluate model      
-    loss_val = autoencoder.evaluate(x=X_val, y=Y_val)
+    loss_val = autoencoder.evaluate(x=X_val, y=X_val)
     
     # Predict outputs
     Y_hat_train = autoencoder.predict(x=X_train)
@@ -657,7 +668,7 @@ if __name__ == '__main__':
 
     if one_machine == True:
         # dirs = [dirs[0]]
-        dirs = ['Z:\\BA\\mimii_baseline\\dataset\\0dB\\pump\\id_06']
+        dirs = ['Z:\\BA\\mimii_baseline\\dataset\\6dB\\pump\\id_00', 'Z:\\BA\\mimii_baseline\\dataset\\6dB\\pump\\id_02', 'Z:\\BA\\mimii_baseline\\dataset\\6dB\\pump\\id_04', 'Z:\\BA\\mimii_baseline\\dataset\\6dB\\pump\\id_06']
         print(dirs)
 
     # initialize visualizer
@@ -683,7 +694,17 @@ if __name__ == '__main__':
         eval_pickle = "{pickle}/eval_{machine_type}_{machine_id}_{db}.pickle".format(pickle=param["pickle_directory"],
                                                                                        machine_type=machine_type,
                                                                                        machine_id=machine_id, db=db)
+        train_files_pickle = "{pickle}/train_files_{machine_type}_{machine_id}_{db}.pickle".format(
+                                                                                       pickle=param["pickle_directory"],
+                                                                                       machine_type=machine_type,
+                                                                                       machine_id=machine_id,
+                                                                                       db=db)
         eval_files_pickle = "{pickle}/eval_files_{machine_type}_{machine_id}_{db}.pickle".format(
+                                                                                       pickle=param["pickle_directory"],
+                                                                                       machine_type=machine_type,
+                                                                                       machine_id=machine_id,
+                                                                                       db=db)
+        train_labels_pickle = "{pickle}/train_labels_{machine_type}_{machine_id}_{db}.pickle".format(
                                                                                        pickle=param["pickle_directory"],
                                                                                        machine_type=machine_type,
                                                                                        machine_id=machine_id,
@@ -709,9 +730,17 @@ if __name__ == '__main__':
                                                                           machine_id=machine_id,
                                                                           db=db)
 
+        # costumize results file
+        now = datetime.now()
+        dt_string = now.strftime("%d/%m/%Y %H:%M:%S")
+        evaluation_result['Date_Time'] = dt_string
+        evaluation_result['Config'] = param['config']
+
         # generate dataset
-        if os.path.exists(train_pickle) and os.path.exists(eval_pickle) and os.path.exists(eval_files_pickle) and os.path.exists(eval_labels_pickle):
+        if os.path.exists(train_pickle) and os.path.exists(train_labels_pickle) and os.path.exists(train_files_pickle) and os.path.exists(eval_pickle) and os.path.exists(eval_files_pickle) and os.path.exists(eval_labels_pickle):
             train_data = load_pickle(train_pickle)
+            train_files = load_pickle(train_files_pickle)
+            train_labels = load_pickle(train_labels_pickle)
             eval_data = load_pickle(eval_pickle)
             eval_files = load_pickle(eval_files_pickle)
             eval_labels = load_pickle(eval_labels_pickle)
@@ -741,10 +770,32 @@ if __name__ == '__main__':
             print(train_data)
             print(np.shape(train_data))
             save_pickle(train_pickle, train_data)
+            save_pickle(train_files_pickle, train_files)
+            save_pickle(train_labels_pickle, train_labels)
             save_pickle(eval_pickle, eval_data)
             save_pickle(eval_files_pickle, eval_files)
             save_pickle(eval_labels_pickle, eval_labels)
 
+        ###############################################################
+        # grid search approach
+        # Working folder: storage
+        ROOT_PATH_2 = 'models/99-AE-MIMII'
+        MODEL_PATH_2 = ROOT_PATH_2 + '/' + strftime("%Y-%m-%d", gmtime()) + '/'
+        # MODEL_PATH_2 = ROOT_PATH_2 + '/' + '2023-05-07' + '/'  # date customizable
+
+
+        if not os.path.exists(MODEL_PATH_2):
+            os.makedirs(MODEL_PATH_2)
+        print(param['config_grid'])
+        # Fit model
+        df, log_label_2, log_loss_val = grid_search_ul(MODEL_PATH_2,
+                                        train_data, train_data, 
+                                        eval_data, eval_data,
+                                        eval_data, eval_data,
+                                        param['config_grid'], 2, evaluation_result_key, 
+                                        generate=True)
+        ###############################################################
+        
         # model training
         print("model training")
         # create autoencoder
@@ -802,6 +853,15 @@ if __name__ == '__main__':
         print('y_pred', y_pred)
         print(np.shape(y_pred))
 
+
+        # threshold with kmeans clustering
+        y_pred_array = np.array(y_pred)
+        y_pred_resh = y_pred_array.reshape(-1, 1)
+        kmeans = KMeans(n_clusters=2, random_state=0).fit(y_pred_resh)
+        centroids = kmeans.cluster_centers_
+        threshold = np.mean(centroids)
+
+
         # AUC
         score = metrics.roc_auc_score(y_true, y_pred)
         print("AUC : {}".format(score))
@@ -809,7 +869,7 @@ if __name__ == '__main__':
         
 
         # F1
-        threshold = np.median(y_pred)
+        # threshold = np.median(y_pred)
         y_pred_binary = [1 if pred > threshold else 0 for pred in y_pred]
         f1_score = metrics.f1_score(y_true, y_pred_binary)
         print("F1 Score : {}".format(f1_score))
@@ -819,8 +879,11 @@ if __name__ == '__main__':
 
         visualizer.recon_plot(error)
         visualizer.save_figure(recon_img)
-        
 
+        # precision recall curve
+        precision, recall, _ = precision_recall_curve(y_true, y_pred)
+        prd = PrecisionRecallDisplay(precision, recall)
+        prd.plot()
 
     with open(result_file, "w") as f:
             f.write(yaml.dump(results, default_flow_style=False))
