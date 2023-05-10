@@ -222,7 +222,9 @@ def extract_features(signal, sr, n_fft=1024, hop_length=512,
     )
     # here was power to db
     # added log scale
+    # print('mel_spectrogram:\n', mel_spectrogram)
     log_mel_spectrogram = 20.0 / power * np.log10(mel_spectrogram + sys.float_info.epsilon)
+    # print('\nlog_mel_spectrogram:\n', log_mel_spectrogram)
     features_vector_size = log_mel_spectrogram.shape[1] - frames + 1
     
     dims = frames * n_mels
@@ -703,10 +705,10 @@ def grid_search_ul(MODEL_PATH,
 ####################################################################################
 if __name__ == '__main__':
     one_machine = True
-    result_file = True
-    normalization = True
-    grid_search = True
-    gen = True
+    result_generation = True
+    normalization = False
+    grid_search = False
+    gen = False
     grid_runs = 2
     
 
@@ -1017,6 +1019,7 @@ if __name__ == '__main__':
         visualizer.pr_curve_plot(y_true, y_pred, evaluation_result_key)
         visualizer.save_figure(pr_curve_img)
 
-    if result_file == True:
+    if result_generation == True:
         with open(result_file, "w") as f:
                 f.write(yaml.dump(results, default_flow_style=False))
+                print("Results saved!")

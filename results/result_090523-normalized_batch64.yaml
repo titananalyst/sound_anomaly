@@ -1,0 +1,28 @@
+pump_id_00_6dB:
+  AUC: 0.6389554501442614
+  Config: &id001
+    activ: relu
+    batch_size: 64
+    epochs: 200
+    n_cl_a: 64
+    n_hl_a: 4
+    n_ls_a: 6
+    patience: 100
+    seed: 229
+  Date_Time: 09/05/2023 08:31:37
+  F1: 0.5181347150259067
+pump_id_02_6dB:
+  AUC: 0.2712442171901631
+  Config: *id001
+  Date_Time: 09/05/2023 08:31:59
+  F1: 0.5369127516778524
+pump_id_04_6dB:
+  AUC: 0.5890999999999998
+  Config: *id001
+  Date_Time: 09/05/2023 08:32:14
+  F1: 0.6104417670682732
+pump_id_06_6dB:
+  AUC: 0.788158400615148
+  Config: *id001
+  Date_Time: 09/05/2023 08:32:28
+  F1: 0.7403314917127071
