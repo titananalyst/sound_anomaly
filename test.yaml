@@ -27,9 +27,9 @@ config:
   n_cl_a: 64         # Initial number of channels (halves for each hidden layer) - h3 = [10, 20, 50]   
   n_ls_a: 6          # Latent space z dimensions - h5 = [6, 8, 10, 12, 14, 16, 18]  
   batch_size: 512    # Batch size autoencoder - h6 = [64, 128, 512, 1024]    
-  epochs: 50         # Epochs - h7 (on demand)
+  epochs: 200         # Epochs - h7 (on demand)
   seed: 229          # Seed number
-  patience: 50
+  patience: 200
         
 config_grid: 
   activ: [relu]      # Activation - h1 = ['tanh', 'relu']
