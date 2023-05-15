@@ -633,7 +633,7 @@ def grid_search_ul(MODEL_PATH,
 
 ####################################################################################
 if __name__ == '__main__':
-    one_machine = True
+    one_machine = False
     result_generation = True
     normalization = True
     
