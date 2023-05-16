@@ -10,6 +10,7 @@ import matplotlib.pylab as plt
 
 import time
 
+import scipy.stats as stats
 import itertools
 import pandas as pd
 import seaborn as sns
@@ -57,7 +58,7 @@ import matplotlib.pyplot as plt
 
 class Visualizer(object):
     def __init__(self):
-        self.fig = plt.figure(figsize=(30, 10))
+        self.fig = plt.figure(figsize=(30, 10), dpi=600)
         plt.subplots_adjust(wspace=0.3, hspace=0.3)
 
     def loss_plot(self, loss, val_loss, label):
@@ -81,7 +82,7 @@ class Visualizer(object):
         ax.legend(loc="upper right", fontsize=22)
         ax.tick_params(axis='both', labelsize=22)
 
-    def recon_plot(self, data, label, n_abnorm):
+    def recon_plot(self, data, label, n_abnorm, perc):
         """
         input:  data:   y_pred as reconstruction error of all files
                 label:  machine type, id and db
@@ -91,7 +92,7 @@ class Visualizer(object):
         ax.cla()
         ax.scatter(np.arange(len(data[:n_abnorm])), data[:n_abnorm], label='normal')
         ax.scatter(np.arange(len(data[n_abnorm:])) + n_abnorm, data[n_abnorm:], label='abnormal')
-        ax.axhline(y=1, color='black', linestyle='-', label=f'Threshold ({1:.2f})')
+        ax.axhline(y=1, color='black', linestyle='-', label=f'Percentile ({perc})')
         ax.set_title(f'Anomaly Detection - {label}', fontsize=22)
         ax.set_xlabel('File Index', fontsize=22)
         ax.set_ylabel('Anomaly Score', fontsize=22)
@@ -152,7 +153,7 @@ def dataloader(files_list, n_fft=1024, hop_length=512, n_mels=64, frames=5, pwr=
         
     return dataset
         
-def file_dataloader(file_name, n_fft=1024, hop_length=512, n_mels=64, frames=5, pwr=2, msg='Dataloader: '):
+def file_dataloader(file_name, n_fft=1024, hop_length=512, n_mels=64, frames=5, pwr=2):
     """
     Function for loading and extracting features form single files.
     """
@@ -838,24 +839,35 @@ if __name__ == '__main__':
                 
                 if normalization == True:
                     data, _, _ = normalize_data(data, min_val, max_val)
-                error = np.mean(np.square(data - autoencoder.predict(data)), axis=1)
+                # error = np.mean(np.square(data - autoencoder.predict(data)), axis=1)
+                error = np.mean(abs(data - autoencoder.predict(data, verbose=0)), axis=1)
                 y_pred[num] = np.mean(error)
                 
             except:
-                print('File broken)')
+                print('File broken:', file)
 
-        # compute the 99.9 percentile of the normal data
-        threshold = np.percentile([y_pred[i] for i in range(len(y_pred)) if y_true[i] == 0], 99.9)
+        # threshold of the normal data and the anomaly score by relative proportion
+        # percentile = 99.8
+        # threshold = np.percentile([y_pred[i] for i in range(len(y_pred)) if y_true[i] == 0], percentile)
+        # anomaly_score = [score / threshold for score in y_pred]
+        # y_pred = anomaly_score
 
-        # compute the anomaly score
+        # # binary prediction based on the anomaly score
+        # y_pred_binary = [1 if score > 1 else 0 for score in anomaly_score]
+
+
+        # calculate mean and std of the normal data
+        normal_error = [y_pred[i] for i in range(len(y_pred)) if y_true[i] == 0]
+        mean, std = np.mean(normal_error), np.std(normal_error)
+
+        # percentile of the normal distribution
+        percentile = 0.998  # 99.8 percentile
+        threshold = stats.norm.ppf(percentile, loc=mean, scale=std)
         anomaly_score = [score / threshold for score in y_pred]
-
-        # replace y_pred with the anomaly score
         y_pred = anomaly_score
 
-        # create binary predictions: 1 if anomaly_score > 1 else 0
+        # binary prediction based on the anomaly score
         y_pred_binary = [1 if score > 1 else 0 for score in anomaly_score]
-
 
         print('error', error)
         print(np.shape(error))
@@ -863,12 +875,11 @@ if __name__ == '__main__':
         print(np.shape(y_pred))
 
         # threshold with kmeans clustering
-        y_pred_array = np.array(y_pred)
-        y_pred_resh = y_pred_array.reshape(-1, 1)
-        kmeans = KMeans(n_clusters=2, random_state=0).fit(y_pred_resh)
-        centroids = kmeans.cluster_centers_
-        threshold = np.mean(centroids)
-
+        # y_pred_array = np.array(y_pred)
+        # y_pred_resh = y_pred_array.reshape(-1, 1)
+        # kmeans = KMeans(n_clusters=2, random_state=0).fit(y_pred_resh)
+        # centroids = kmeans.cluster_centers_
+        # threshold = np.mean(centroids)
 
         # AUC
         score = metrics.roc_auc_score(y_true, y_pred)
@@ -885,7 +896,7 @@ if __name__ == '__main__':
 
         results[evaluation_result_key] = evaluation_result
 
-        visualizer.recon_plot(y_pred, evaluation_result_key, n_norm_abnorm[1])
+        visualizer.recon_plot(y_pred, evaluation_result_key, n_norm_abnorm[1], percentile)
         visualizer.save_figure(recon_img)
 
         # precision recall curve
