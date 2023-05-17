@@ -637,6 +637,7 @@ if __name__ == '__main__':
     one_machine = False
     result_generation = True
     normalization = True
+    gen_grid_plot = True
     
     # main 
     # load parameter yaml
@@ -907,3 +908,7 @@ if __name__ == '__main__':
         with open(result_file, "w") as f:
                 f.write(yaml.dump(results, default_flow_style=False))
                 print("Results saved!")
+
+
+    if gen_grid_plot = True:
+        pass

@@ -10,6 +10,7 @@ import matplotlib.pylab as plt
 
 import time
 
+import scipy.stats as stats
 import itertools
 import pandas as pd
 import seaborn as sns
@@ -156,71 +157,253 @@ def normalize_data(x, lb, ub, max_v=1.0, min_v=-1.0):
 
     return x_n, lb, ub 
 
+##################################################################################
+# eval grid
+
+# def load_all_models(directory):
+#     models = []
+#     model_info = []
+
+#     # Get all files in the directory
+#     all_files = os.listdir(directory)
+
+#     # Filter for only the .hdf5 files
+#     hdf5_files = [f for f in all_files if f.endswith('.hdf5')]
+
+#     # Load each model
+#     for model_file in hdf5_files:
+#         model_path = os.path.join(directory, model_file)
+#         model = tf.keras.models.load_model(model_path)
+
+#         # Extract machine_type, machine_id, db from the filename
+#         parts = model_file.replace('model_', '').replace('.hdf5', '').split('_')
+#         print(parts)
+#         db = parts[-1]
+#         machine_type =  parts[0]# Join remaining parts as machine_type
+#         machine_id = '_'.join(parts[-3:-1]) 
+
+#         # Append the loaded model and the extracted info to the lists
+#         models.append(model)
+#         model_info.append({
+#             "model_name": model_file,
+#             "machine_type": machine_type,
+#             "machine_id": machine_id,
+#             "db": db
+#         })
+
+#     return models, model_info
+
+def load_all_models(directory, base_dir):
+    models = []
+    model_info = []
+
+    for dir_idx, target_dir in enumerate(base_dir):
+        print("\n[{num}/{total}] {dirname}".format(dirname=target_dir, num=dir_idx + 1, total=len(base_dir)))
+        # Extract dataset parameters
+        # db, machine_type, machine_id = os.path.normpath(target_dir).split(os.sep)[-3:]
+
+        # Define the corresponding model filename
+
+        # Extract dataset parameters 
+        db = os.path.split(os.path.split(os.path.split(target_dir)[0])[0])[1]
+        machine_type = os.path.split(os.path.split(target_dir)[0])[1]
+        machine_id = os.path.split(target_dir)[1]
+
+        model_file = f"model_{machine_type}_{machine_id}_{db}.hdf5"
+
+        model_path = os.path.join(directory, model_file)
+        print("loaded model", model_path)
+
+        # Check if the model file exists before trying to load it
+        if os.path.exists(model_path):
+            model = tf.keras.models.load_model(model_path)
+
+            # Append the loaded model and the extracted info to the lists
+            models.append(model)
+            model_info.append({
+                "model_name": model_file,
+                "machine_type": machine_type,
+                "machine_id": machine_id,
+                "db": db
+            })
+        else:
+            print(f"Warning: Expected model file does not exist: {model_path}")
+
+    return models, model_info
+
+
+def load_data_from_directory(param, base_dir):
+    # Initialize a dictionary to hold all the data
+    all_data = {}
+
+    for dir_idx, target_dir in enumerate(base_dir):
+        print("\n[{num}/{total}] {dirname}".format(dirname=target_dir, num=dir_idx + 1, total=len(base_dir)))
+        
+        # Extract dataset parameters 
+        db = os.path.split(os.path.split(os.path.split(target_dir)[0])[0])[1]
+        machine_type = os.path.split(os.path.split(target_dir)[0])[1]
+        machine_id = os.path.split(target_dir)[1]
+
+        # Setup paths
+        file_types = ["train", "eval", "train_files", "eval_files", "train_labels", "eval_labels", "n_norm_abnorm", "norm_values"]
+        for file_type in file_types:
+            file_path = "{pickle}/{file_type}_{machine_type}_{machine_id}_{db}.pickle".format(
+                pickle=param["pickle_directory"],
+                file_type=file_type,
+                machine_type=machine_type,
+                machine_id=machine_id,
+                db=db
+            )
+
+            # Load the pickle file
+            data = load_pickle(file_path)
+
+            # Store the data in the dictionary, creating sub-dictionaries as necessary
+            if machine_type not in all_data:
+                all_data[machine_type] = {}
+            if machine_id not in all_data[machine_type]:
+                all_data[machine_type][machine_id] = {}
+            if db not in all_data[machine_type][machine_id]:
+                all_data[machine_type][machine_id][db] = {}
+
+            all_data[machine_type][machine_id][db][file_type] = data
+
+    return all_data
+
 
 ####################################################################################
 if __name__ == '__main__':
 
-    # Define SNR levels and initialize result matrices
-    snrs = ['min6dB', '0dB', '6dB']
-    auc_results = np.zeros((len(snrs), len(snrs)))
-    f1_results = np.zeros((len(snrs), len(snrs)))
+    # load parameter yaml
+    with open("test.yaml") as stream:
+        param = yaml.safe_load(stream)
+    
+        # Load base directory list
+    dirs = sorted(glob.glob(os.path.abspath("{base}/*/*/*".format(base=param["base_directory"]))))
+    dirs = ['Z:\\BA\\mimii_baseline\\dataset\\6dB\\pump\\id_00', 'Z:\\BA\\mimii_baseline\\dataset\\0dB\\pump\\id_00', 'Z:\\BA\\mimii_baseline\\dataset\\min6dB\\pump\\id_00']
+    
+    # load models
+    model_dir = param["model_directory"]
+    models, model_info = load_all_models(model_dir, dirs)
+    print("Loaded all models from", model_dir)
+    # print(models)
+    # print(model_info)
 
-    # Loop over all combinations of training and testing SNRs
-    for i, train_snr in enumerate(snrs):
-        for j, test_snr in enumerate(snrs):
-            # Load training data
-            train_data, train_labels = load_pickle(f"dataset/{train_snr}dB/train.pkl")
+    all_data = load_data_from_directory(param, dirs)
+    # print("")
+    # print(all_data)
 
-            # Initialize and train model
-            model = YourModel()  # Replace with your model class
-            model.fit(train_data, train_labels)
 
-            # Load testing data
-            eval_files, eval_labels = load_pickle(f"dataset/{test_snr}dB/test.pkl")
+    ##############################################################
+    # model evaluation
+    db_levels = ['min6dB', '0dB', '6dB']
 
-            # Model evaluation
-            print('evaluation')
-            y_pred = [0. for k in eval_labels]
-            y_true = eval_labels
+    for model, info in zip(models, model_info):
+        print('evaluation')
+        print(info, '\n')
+        # Extract machine_type, machine_id, db from info
+        machine_type = info["machine_type"]
+        machine_id = info["machine_id"]
+        
+        # Iterate over db levels
+        for db in db_levels:
+            print(f"Evaluating model {info['model_name']} with eval_data: {db}")
 
-            for num, file in tqdm(enumerate(eval_files), total = len(eval_files)):
-                try:
-                    data = file_dataloader(file,
-                                    n_fft = param['feature']['n_fft'],
-                                    hop_length = param['feature']['hop_length'],
-                                    n_mels = param['feature']['n_mels'],
-                                    frames = param['feature']['frames'],
-                                    pwr = param['feature']['power'])
-                    
-                    if normalization == True:
+            # Check if data exists for this db level
+            if db in all_data[machine_type][machine_id]:
+                print(f'Load data for {machine_type}_{machine_id}_{db}')
+                # Extract the data for this model and db level
+                eval_data = all_data[machine_type][machine_id][db]
+
+                # Set the variables
+                eval_files = eval_data['eval_files']
+                eval_labels = eval_data['eval_labels']
+                n_norm_abnorm = eval_data['n_norm_abnorm']
+                min_val, max_val = eval_data['norm_values']
+
+                # model evaluation
+                print('evaluation')
+                y_pred = [0. for k in eval_labels]
+                y_true = eval_labels
+
+                for num, file in tqdm(enumerate(eval_files), total = len(eval_files)):
+                    try:
+                        data = file_dataloader(file,
+                                        n_fft = param['feature']['n_fft'],
+                                        hop_length = param['feature']['hop_length'],
+                                        n_mels = param['feature']['n_mels'],
+                                        frames = param['feature']['frames'],
+                                        pwr = param['feature']['power'])
+                        
+                        
                         data, _, _ = normalize_data(data, min_val, max_val)
+                        # error = np.mean(np.square(data - autoencoder.predict(data)), axis=1)
+                        error = np.mean(abs(data - autoencoder.predict(data, verbose=0)), axis=1)
+                        y_pred[num] = np.mean(error)
+                        
+                    except:
+                        print('File broken:', file)
 
-                    error = np.mean(np.square(data - autoencoder.predict(data)), axis=1)
-                    y_pred[num] = np.mean(error)
-                    
-                except:
-                    print('File broken)')
+                # threshold of the normal data and the anomaly score by relative proportion
+                # percentile = 99.8
+                # threshold = np.percentile([y_pred[i] for i in range(len(y_pred)) if y_true[i] == 0], percentile)
+                # anomaly_score = [score / threshold for score in y_pred]
+                # y_pred = anomaly_score
 
-            # compute the 99.9 percentile of the normal data
-            threshold = np.percentile([y_pred[i] for i in range(len(y_pred)) if y_true[i] == 0], 99.9)
+                # # binary prediction based on the anomaly score
+                # y_pred_binary = [1 if score > 1 else 0 for score in anomaly_score]
 
-            # compute the anomaly score
-            anomaly_score = [score / threshold for score in y_pred]
 
-            # replace y_pred with the anomaly score
-            y_pred = anomaly_score
+                # calculate mean and std of the normal data
+                normal_error = [y_pred[i] for i in range(len(y_pred)) if y_true[i] == 0]
+                mean, std = np.mean(normal_error), np.std(normal_error)
 
-            # create binary predictions: 1 if anomaly_score > 1 else 0
-            y_pred_binary = [1 if score > 1 else 0 for score in anomaly_score]
+                # percentile of the normal distribution
+                percentile = 0.998  # 99.8 percentile
+                threshold = stats.norm.ppf(percentile, loc=mean, scale=std)
+                anomaly_score = [score / threshold for score in y_pred]
+                y_pred = anomaly_score
 
-            # AUC
-            score = roc_auc_score(y_true, y_pred)
-            print("AUC : {}".format(score))
-            auc_results[i, j] = float(score)
-            
+                # binary prediction based on the anomaly score
+                y_pred_binary = [1 if score > 1 else 0 for score in anomaly_score]
 
-            # F1
-            f1_score_res = f1_score
-            f1_score_res = f1_score(y_true, y_pred_binary)
-            print("F1 Score : {}".format(f1_score_res))
-            f1_results[i, j] = float(f1_score_res)
+                print('error', error)
+                print(np.shape(error))
+                print('y_pred', y_pred)
+                print(np.shape(y_pred))
+
+                # threshold with kmeans clustering
+                # y_pred_array = np.array(y_pred)
+                # y_pred_resh = y_pred_array.reshape(-1, 1)
+                # kmeans = KMeans(n_clusters=2, random_state=0).fit(y_pred_resh)
+                # centroids = kmeans.cluster_centers_
+                # threshold = np.mean(centroids)
+
+                # AUC
+                score = metrics.roc_auc_score(y_true, y_pred)
+                print("AUC : {}".format(score))
+                evaluation_result["AUC"] = float(score)
+                
+
+                # F1
+                # threshold = np.median(y_pred)
+                # y_pred_binary = [1 if pred > threshold else 0 for pred in y_pred]
+                f1_score = metrics.f1_score(y_true, y_pred_binary)
+                print("F1 Score : {}".format(f1_score))
+                evaluation_result["F1"] = float(f1_score)
+
+                results[evaluation_result_key] = evaluation_result
+
+                visualizer.recon_plot(y_pred, evaluation_result_key, n_norm_abnorm[1], percentile)
+                visualizer.save_figure(recon_img)
+
+                # precision recall curve
+                visualizer.pr_curve_plot(y_true, y_pred, evaluation_result_key)
+                visualizer.save_figure(pr_curve_img)
+
+
+            else:
+                print(f"Warning: No data found for db level {db} for model {info['model_name']}")
+
+        
+        
