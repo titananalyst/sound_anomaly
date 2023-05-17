@@ -1,0 +1,98 @@
+id_00:
+  0dB:
+    0dB:
+      AUC: !!python/object/apply:numpy.core.multiarray.scalar
+      - &id001 !!python/object/apply:numpy.dtype
+        args:
+        - f8
+        - false
+        - true
+        state: !!python/tuple
+        - 3
+        - <
+        - null
+        - null
+        - null
+        - -1
+        - -1
+        - 0
+      - !!binary |
+        SDYQEU105j8=
+      F1: !!python/object/apply:numpy.core.multiarray.scalar
+      - *id001
+      - !!binary |
+        S2DTfrIE5j8=
+    6dB:
+      AUC: !!python/object/apply:numpy.core.multiarray.scalar
+      - *id001
+      - !!binary |
+        fXPXho236j8=
+      F1: !!python/object/apply:numpy.core.multiarray.scalar
+      - *id001
+      - !!binary |
+        HC1IQM2u5z8=
+    min6dB:
+      AUC: !!python/object/apply:numpy.core.multiarray.scalar
+      - *id001
+      - !!binary |
+        JTZ7TuNz5z8=
+      F1: !!python/object/apply:numpy.core.multiarray.scalar
+      - *id001
+      - !!binary |
+        bv4KsxpFzD8=
+  6dB:
+    0dB:
+      AUC: !!python/object/apply:numpy.core.multiarray.scalar
+      - *id001
+      - !!binary |
+        ZLFmlaLl6T8=
+      F1: !!python/object/apply:numpy.core.multiarray.scalar
+      - *id001
+      - !!binary |
+        3J+dd/EI6D8=
+    6dB:
+      AUC: !!python/object/apply:numpy.core.multiarray.scalar
+      - *id001
+      - !!binary |
+        zm4Nr4Gp7D8=
+      F1: !!python/object/apply:numpy.core.multiarray.scalar
+      - *id001
+      - !!binary |
+        St5fB2NW6j8=
+    min6dB:
+      AUC: !!python/object/apply:numpy.core.multiarray.scalar
+      - *id001
+      - !!binary |
+        TVmDhIeX6D8=
+      F1: !!python/object/apply:numpy.core.multiarray.scalar
+      - *id001
+      - !!binary |
+        shVBw0nd1z8=
+  min6dB:
+    0dB:
+      AUC: !!python/object/apply:numpy.core.multiarray.scalar
+      - *id001
+      - !!binary |
+        RakPvULN5D8=
+      F1: !!python/object/apply:numpy.core.multiarray.scalar
+      - *id001
+      - !!binary |
+        xqdMOwdr1j8=
+    6dB:
+      AUC: !!python/object/apply:numpy.core.multiarray.scalar
+      - *id001
+      - !!binary |
+        +xKUTHtn5j8=
+      F1: !!python/object/apply:numpy.core.multiarray.scalar
+      - *id001
+      - !!binary |
+        N7B3TA3svT8=
+    min6dB:
+      AUC: !!python/object/apply:numpy.core.multiarray.scalar
+      - *id001
+      - !!binary |
+        6CT8s7du5D8=
+      F1: !!python/object/apply:numpy.core.multiarray.scalar
+      - *id001
+      - !!binary |
+        59ceclkx0D8=
