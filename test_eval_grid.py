@@ -3,46 +3,25 @@
 import pickle
 import os
 import sys
-import glob
 
 import numpy as np
 import matplotlib.pylab as plt
 
-import time
+import yaml
 import json
 
 import scipy.stats as stats
-import itertools
 import pandas as pd
 import seaborn as sns
 import tensorflow as tf
 import matplotlib.pyplot as plt
 from datetime import datetime
 from sklearn import metrics
-from sklearn.cluster import KMeans
-from pandas import DataFrame
-from itertools import product
-from matplotlib import gridspec
-from operator import itemgetter
 from tqdm import tqdm
-from time import localtime, gmtime, strftime
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import precision_recall_curve
-from sklearn.metrics import PrecisionRecallDisplay
 
-import yaml
+
 import logging
 import librosa
-
-
-####################################################################################
-
-####################################################################################
-
-# Directories
-PICKLE_DIR = 'D:\9999_OneDrive_ZHAW\OneDrive - ZHAW\BA_ZHAW_RTO\pickle'
-PICKLE_DIR_SMALL = 'D:\9999_OneDrive_ZHAW\OneDrive - ZHAW\BA_ZHAW_RTO\pickle\subset'
-root = 'Z:\\BA\\mimii_baseline\\dataset'
 
 ####################################################################################
 
@@ -167,10 +146,8 @@ def load_all_models(directory, base_dir):
     for dir_idx, target_dir in enumerate(base_dir):
         print("\n[{num}/{total}] {dirname}".format(dirname=target_dir, num=dir_idx + 1, total=len(base_dir)))
         # Extract dataset parameters
-        # db, machine_type, machine_id = os.path.normpath(target_dir).split(os.sep)[-3:]
 
         # Define the corresponding model filename
-
         # Extract dataset parameters 
         db = os.path.split(os.path.split(os.path.split(target_dir)[0])[0])[1]
         machine_type = os.path.split(os.path.split(target_dir)[0])[1]
@@ -239,63 +216,75 @@ def load_data_from_directory(param, base_dir):
 
 ####################################################################################
 
+####################################################################################
 
-def grid_plot_auc(data):
-    # Preprocess data
-    df_list = []
-    for model, model_data in data.items():
-        for eval_db, eval_db_data in model_data.items():
-            for model_db, metrics in eval_db_data.items():
-                df_list.append([f"{model}_{eval_db}", model_db, metrics["AUC"]])
+# Visualizer
+import matplotlib.pyplot as plt
 
-    df = pd.DataFrame(df_list, columns=["Model", "Model_DB", "AUC"])
+class Visualizer(object):
+    def __init__(self):
+        self.fig = plt.figure(figsize=(15, 12), dpi=1200)
+        plt.subplots_adjust(wspace=0.3, hspace=0.3)
 
-    # Pivot the data to make it suitable for a heatmap
-    pivot_df = df.pivot_table(values='AUC', index='Model', columns='Model_DB')
+    def grid_plot_auc(self, data):
+        """plot"""
+        # Preprocess data
+        df_list = []
+        for model, model_data in data.items():
+            for eval_db, eval_db_data in model_data.items():
+                for model_db, metrics in eval_db_data.items():
+                    df_list.append([f"{model}_{eval_db}", model_db, metrics["AUC"]])
 
-    # Reindex to ensure order
-    pivot_df = pivot_df.reindex(index=pivot_df.index[::-1], columns=['min6dB', '0dB', '6dB'])
+        df = pd.DataFrame(df_list, columns=["Model", "Model_DB", "AUC"])
+        # Pivot the data to make it suitable for a heatmap
+        pivot_df = df.pivot_table(values='AUC', index='Model', columns='Model_DB')
 
-    # Draw a heatmap
-    plt.figure(figsize=(10, 7))
-    heatmap = sns.heatmap(pivot_df, annot=True, cmap="RdYlGn")
-    plt.title("Model Performance (AUC)")
-    plt.xlabel('eval_dB')
-    plt.ylabel('Model')
-    plt.yticks(rotation=0)
-    plt.show()
+        # Reindex to ensure order
+        pivot_df = pivot_df.reindex(index=['id_00_min6dB', 'id_00_0dB', 'id_00_6dB'], columns=['min6dB', '0dB', '6dB'])
 
-
-def grid_plot_f1(data):
-    # Preprocess data
-    df_list = []
-    for model, model_data in data.items():
-        for eval_db, eval_db_data in model_data.items():
-            for model_db, metrics in eval_db_data.items():
-                df_list.append([f"{model}_{eval_db}", model_db, metrics["F1"]])
-
-    df = pd.DataFrame(df_list, columns=["Model", "Model_DB", "F1"])
-
-    # Pivot the data to make it suitable for a heatmap
-    pivot_df = df.pivot_table(values='F1', index='Model', columns='Model_DB')
-
-    # Reindex to ensure order
-    pivot_df = pivot_df.reindex(index=pivot_df.index[::-1], columns=['min6dB', '0dB', '6dB'])
-
-    # Draw a heatmap
-    plt.figure(figsize=(10, 7))
-    heatmap = sns.heatmap(pivot_df, annot=True, cmap="RdYlGn")
-    plt.title("Model Performance (F1)")
-    plt.xlabel('eval_dB')
-    plt.ylabel('Model')
-    plt.yticks(rotation=0)
-    plt.show()
+        # Draw a heatmap
+        ax = self.fig.add_subplot(1,1,1)
+        ax.cla()
+        heatmap = sns.heatmap(pivot_df, annot=True, cmap="RdYlGn")
+        ax.set_title("Model Performance (AUC)")
+        ax.set_xlabel('eval_dB')
+        ax.set_ylabel('Model')
+        ax.set_yticklabels(ax.get_yticklabels(), rotation=0)
 
 
+    def grid_plot_f1(self, data):
+        # Preprocess data
+        df_list = []
+        for model, model_data in data.items():
+            for eval_db, eval_db_data in model_data.items():
+                for model_db, metrics in eval_db_data.items():
+                    df_list.append([f"{model}_{eval_db}", model_db, metrics["F1"]])
+
+        df = pd.DataFrame(df_list, columns=["Model", "Model_DB", "F1"])
+
+        # Pivot the data to make it suitable for a heatmap
+        pivot_df = df.pivot_table(values='F1', index='Model', columns='Model_DB')
+
+        # Reindex to ensure order
+        pivot_df = pivot_df.reindex(index=['id_00_min6dB', 'id_00_0dB', 'id_00_6dB'], columns=['min6dB', '0dB', '6dB'])
+
+        # Draw a heatmap
+        ax = self.fig.add_subplot(1,1,1)
+        ax.cla()
+        heatmap = sns.heatmap(pivot_df, annot=True, cmap="RdYlGn")
+        ax.set_title("Model Performance (F1)")
+        ax.set_xlabel('eval_dB')
+        ax.set_ylabel('Model')
+        ax.set_yticklabels(ax.get_yticklabels(), rotation=0)
+
+    def save_figure(self, name):
+        self.fig.savefig(name)
+        print('Image saved!')
+        self.fig.clf()
 
 ####################################################################################
 if __name__ == '__main__':
-    evaluation = False
+    evaluation = True
     gen_plot = True
 
 
@@ -304,8 +293,12 @@ if __name__ == '__main__':
         param = yaml.safe_load(stream)
     
     # Load base directory list
-    dirs = sorted(glob.glob(os.path.abspath("{base}/*/*/*".format(base=param["base_directory"]))))
-    dirs = ['Z:\\BA\\mimii_baseline\\dataset\\6dB\\pump\\id_00', 'Z:\\BA\\mimii_baseline\\dataset\\0dB\\pump\\id_00', 'Z:\\BA\\mimii_baseline\\dataset\\min6dB\\pump\\id_00']
+    # dirs = sorted(glob.glob(os.path.abspath("{base}/*/*/*".format(base=param["base_directory"]))))
+
+    # pump id 
+    id = '00'
+    dirs = [f'Z:\\BA\\mimii_baseline\\dataset\\6dB\\pump\\id_{id}', f'Z:\\BA\\mimii_baseline\\dataset\\0dB\\pump\\id_{id}', f'Z:\\BA\\mimii_baseline\\dataset\\min6dB\\pump\\id_{id}']
+    print(dirs)
 
     results = {}
     # filepath for results
@@ -328,7 +321,7 @@ if __name__ == '__main__':
         # print("")
         # print(all_data)
     
-        db_levels = ['min6dB', '0dB', '6dB']
+        db_levels = ['6dB', '0dB', 'min6dB']
 
         for model, info in zip(models, model_info):
             print('\nevaluation')
@@ -346,6 +339,9 @@ if __name__ == '__main__':
             if model_db not in results[machine_id]:
                 results[machine_id][model_db] = {}
             
+            # load model
+            autoencoder = model
+                
             # Iterate over db levels
             for eval_db in db_levels:
                 print(f"\nEvaluating model {info['model_name']} with eval_data: {eval_db}")
@@ -364,9 +360,6 @@ if __name__ == '__main__':
 
                     # model evaluation
                     print('evaluation')
-
-                    # load model
-                    autoencoder = model
 
                     y_pred = [0. for k in eval_labels]
                     y_true = eval_labels
@@ -438,7 +431,17 @@ if __name__ == '__main__':
         with open(filepath, 'r') as f:
             results = json.load(f)
         print(results)
+        
+        grid_eval_dir = param['result_grid_directory']
+        grid_eval_path = f'{grid_eval_dir}/{date_str}'
 
-        grid_plot_auc(results)
+        if not os.path.exists(grid_eval_path):
+            os.makedirs(grid_eval_path)
 
-        grid_plot_f1(results)
+        visualiser = Visualizer()
+        print(f'{grid_eval_path}/model_id_{id}_AUC.png')
+        visualiser.grid_plot_auc(results)
+        visualiser.save_figure(f'{grid_eval_path}/model_id_{id}_AUC.png')
+
+        visualiser.grid_plot_f1(results)
+        visualiser.save_figure(f'{grid_eval_path}/model_id_{id}_F1.png')
