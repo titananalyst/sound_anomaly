@@ -58,7 +58,7 @@ import matplotlib.pyplot as plt
 
 class Visualizer(object):
     def __init__(self):
-        self.fig = plt.figure(figsize=(30, 10), dpi=600)
+        self.fig = plt.figure(figsize=(30, 10), dpi=1000)
         plt.subplots_adjust(wspace=0.3, hspace=0.3)
 
     def loss_plot(self, loss, val_loss, label):
@@ -910,5 +910,5 @@ if __name__ == '__main__':
                 print("Results saved!")
 
 
-    if gen_grid_plot = True:
+    if gen_grid_plot == True:
         pass

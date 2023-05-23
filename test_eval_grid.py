@@ -221,64 +221,82 @@ def load_data_from_directory(param, base_dir):
 
 # Visualizer
 import matplotlib.pyplot as plt
+from matplotlib.colors import LinearSegmentedColormap
+
+# color reference: "RdYlGn" (orange is darkened here)
+color = ["#d7191c", "#d7191c", "#ff952d", "#ff952d","#1a9641", "#1a9641"]
+vector_list = [0, 0.2999999, 0.3, 0.6999999, 0.7, 1]
+color_list = list(zip(vector_list, color))
+cmap = LinearSegmentedColormap.from_list('rg', color_list, N=256)
 
 class Visualizer(object):
     def __init__(self):
-        self.fig = plt.figure(figsize=(15, 12), dpi=1200)
+        self.fig = plt.figure(figsize=(20, 17), dpi=1200)
         plt.subplots_adjust(wspace=0.3, hspace=0.3)
 
-    def grid_plot_auc(self, data, model_id):
+    def grid_plot(self, data, model_id, metric):
         """plot"""
         # Preprocess data
         df_list = []
         for model, model_data in data.items():
             for eval_db, eval_db_data in model_data.items():
                 for model_db, metrics in eval_db_data.items():
-                    df_list.append([f"{model}_{eval_db}", model_db, metrics["AUC"]])
+                    df_list.append([f"{model}_{eval_db}", model_db, metrics[metric]])
 
-        df = pd.DataFrame(df_list, columns=["Model", "Model_DB", "AUC"])
-        print(df)
+        df = pd.DataFrame(df_list, columns=["Model", "Model_DB", metric])
+        # print(df)
+
         # Pivot the data to make it suitable for a heatmap
-        pivot_df = df.pivot_table(values='AUC', index='Model', columns='Model_DB')
-        print(pivot_df)
+        pivot_df = df.pivot_table(values=metric, index='Model', columns='Model_DB')
+        # print(pivot_df)
+        
         # Reindex to ensure order
         pivot_df = pivot_df.reindex(index=[f'id_{model_id}_min6dB', f'id_{model_id}_0dB', f'id_{model_id}_6dB'], columns=['min6dB', '0dB', '6dB'])
-        print(pivot_df)
+        # print(pivot_df)
+        
         # Draw a heatmap
         ax = self.fig.add_subplot(1,1,1)
         ax.cla()
-        heatmap = sns.heatmap(pivot_df, annot=True, cmap="RdYlGn")
-        ax.set_title("Model Performance (AUC)")
-        ax.set_xlabel('eval_dB')
-        ax.set_ylabel('Model')
-        ax.set_yticklabels(ax.get_yticklabels(), rotation=0)
+        heatmap = sns.heatmap(pivot_df, annot=True, cmap=cmap, vmin=0, vmax=1,
+                              linewidths=2,
+                              linecolor="white", 
+                              annot_kws={"size":18}, 
+                              cbar_kws={'label': 'Accuracy %',
+                                        "ticks":[0, 0.3, 0.5, 0.7, 1]},)
+        
+        ax.set_title(f"Model Performance ({metric})", fontsize=22)
+        ax.set_xlabel('testset_dB', fontsize=22)
+        ax.set_ylabel(f'model id_{model_id}', fontsize=22)
+        ax.set_yticklabels(ax.get_yticklabels(), rotation=0)  # rotation labels x,y axis
+        ax.tick_params(axis='both', labelsize=18)
+        cax = ax.figure.axes[-1]  # access colorbar
+        cax.tick_params(labelsize=18) # cbar tick size
+        cax.yaxis.label.set_size(20) # label "Accuracy %"
 
 
-    def grid_plot_f1(self, data, model_id):
-        # Preprocess data
-        df_list = []
-        for model, model_data in data.items():
-            for eval_db, eval_db_data in model_data.items():
-                for model_db, metrics in eval_db_data.items():
-                    df_list.append([f"{model}_{eval_db}", model_db, metrics["F1"]])
-
-        df = pd.DataFrame(df_list, columns=["Model", "Model_DB", "F1"])
-
-        # Pivot the data to make it suitable for a heatmap
-        pivot_df = df.pivot_table(values='F1', index='Model', columns='Model_DB')
-
-        # Reindex to ensure order
-        pivot_df = pivot_df.reindex(index=[f'id_{model_id}_min6dB', f'id_{model_id}_0dB', f'id_{model_id}_6dB'], columns=['min6dB', '0dB', '6dB'])
-        # pivot_df = pivot_df.reindex(index=['id_00_min6dB', 'id_00_0dB', 'id_00_6dB'], columns=['min6dB', '0dB', '6dB'])
-
-        # Draw a heatmap
-        ax = self.fig.add_subplot(1,1,1)
+    def recon_plot(self, data, label, n_abnorm, perc, eval_dB):
+        self.fig = plt.figure(figsize=(30, 10), dpi=1000)
+        """
+        input:  data:   y_pred as reconstruction error of all files
+                label:  machine type, id and db
+                n_abnorm: number of abnormal files for the train eval split
+        """
+        ax = self.fig.add_subplot(1, 1, 1)
         ax.cla()
-        heatmap = sns.heatmap(pivot_df, annot=True, cmap="RdYlGn")
-        ax.set_title("Model Performance (F1)")
-        ax.set_xlabel('eval_dB')
-        ax.set_ylabel('Model')
-        ax.set_yticklabels(ax.get_yticklabels(), rotation=0)
+        ax.scatter(np.arange(len(data[:n_abnorm])), data[:n_abnorm], label='normal')
+        ax.scatter(np.arange(len(data[n_abnorm:])) + n_abnorm, data[n_abnorm:], label='abnormal')
+        ax.axhline(y=1, color='black', linestyle='-', label=f'Percentile ({perc})')
+        ax.set_title(f'Anomaly Score - Model {label} on testset {eval_dB}', fontsize=22)
+        ax.set_xlabel('File Index', fontsize=22)
+        ax.set_ylabel('Anomaly Score', fontsize=22)
+        ax.legend(loc="upper left", fontsize=22)
+        ax.tick_params(axis='both', labelsize=22)
+        
+        if min(data) > 0.6:
+            ax.set_ylim(0.55)
+        else:
+            ax.set_ylim(min(data)-0.05)
+
 
     def save_figure(self, name):
         self.fig.savefig(name)
@@ -288,6 +306,7 @@ class Visualizer(object):
 ####################################################################################
 if __name__ == '__main__':
     evaluation = True
+    anomaly_plot = True
     gen_plot = True
 
 
@@ -299,7 +318,7 @@ if __name__ == '__main__':
     # dirs = sorted(glob.glob(os.path.abspath("{base}/*/*/*".format(base=param["base_directory"]))))
 
     # pump id 
-    id = '06'
+    id = '00'
     dirs = [f'Z:\\BA\\mimii_baseline\\dataset\\6dB\\pump\\id_{id}', f'Z:\\BA\\mimii_baseline\\dataset\\0dB\\pump\\id_{id}', f'Z:\\BA\\mimii_baseline\\dataset\\min6dB\\pump\\id_{id}']
     print(dirs)
 
@@ -313,6 +332,16 @@ if __name__ == '__main__':
     ##############################################################
     # model evaluation
     if evaluation == True:
+        # dir for anomaly score plots
+        grid_eval_dir = param['result_model_anomaly']
+        grid_eval_path = f'{grid_eval_dir}/{date_str}'
+
+        if not os.path.exists(grid_eval_dir):
+            os.makedirs(grid_eval_dir)
+
+        if not os.path.exists(grid_eval_path):
+            os.makedirs(grid_eval_path)
+
         # load models
         model_dir = param["model_directory"]
         models, model_info = load_all_models(model_dir, dirs)
@@ -419,6 +448,18 @@ if __name__ == '__main__':
                         "F1": f1_score
                     }
 
+
+                    # plot anomaly score
+                    if anomaly_plot == True:
+                        vis_recon = Visualizer()
+
+                        evaluation_result_key = "{machine_type}_{machine_id}_{db}".format(machine_type=machine_type,
+                                                                            machine_id=machine_id,
+                                                                            db=model_db)
+                        
+                        vis_recon.recon_plot(y_pred, evaluation_result_key, n_norm_abnorm[1], percentile, eval_db)
+                        vis_recon.save_figure(f'{grid_eval_path}/model_id_{id}_{model_db}_testset_{eval_db}_anomaly_score.png')
+
                 else:
                     print(f"Warning: No data found for db level {eval_db} for model {info['model_name']}")
         print(results)
@@ -437,7 +478,7 @@ if __name__ == '__main__':
         grid_eval_dir = param['result_grid_directory']
         grid_eval_path = f'{grid_eval_dir}/{date_str}'
 
-        if not os.path.exists(grid_eval_path):
+        if not os.path.exists(grid_eval_dir):
             os.makedirs(grid_eval_dir)
 
         if not os.path.exists(grid_eval_path):
@@ -446,8 +487,8 @@ if __name__ == '__main__':
         # visualize grids
         visualiser = Visualizer()
         print(f'{grid_eval_path}/model_id_{id}_AUC.png')
-        visualiser.grid_plot_auc(results, id)
+        visualiser.grid_plot(results, id, "AUC")
         visualiser.save_figure(f'{grid_eval_path}/model_id_{id}_AUC.png')
 
-        visualiser.grid_plot_f1(results, id)
+        visualiser.grid_plot(results, id, "F1")
         visualiser.save_figure(f'{grid_eval_path}/model_id_{id}_F1.png')
