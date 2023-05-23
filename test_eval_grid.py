@@ -18,6 +18,7 @@ import matplotlib.pyplot as plt
 from datetime import datetime
 from sklearn import metrics
 from tqdm import tqdm
+from sklearn.metrics import precision_recall_curve
 
 
 import logging
@@ -226,7 +227,7 @@ class Visualizer(object):
         self.fig = plt.figure(figsize=(15, 12), dpi=1200)
         plt.subplots_adjust(wspace=0.3, hspace=0.3)
 
-    def grid_plot_auc(self, data):
+    def grid_plot_auc(self, data, model_id):
         """plot"""
         # Preprocess data
         df_list = []
@@ -236,12 +237,13 @@ class Visualizer(object):
                     df_list.append([f"{model}_{eval_db}", model_db, metrics["AUC"]])
 
         df = pd.DataFrame(df_list, columns=["Model", "Model_DB", "AUC"])
+        print(df)
         # Pivot the data to make it suitable for a heatmap
         pivot_df = df.pivot_table(values='AUC', index='Model', columns='Model_DB')
-
+        print(pivot_df)
         # Reindex to ensure order
-        pivot_df = pivot_df.reindex(index=['id_00_min6dB', 'id_00_0dB', 'id_00_6dB'], columns=['min6dB', '0dB', '6dB'])
-
+        pivot_df = pivot_df.reindex(index=[f'id_{model_id}_min6dB', f'id_{model_id}_0dB', f'id_{model_id}_6dB'], columns=['min6dB', '0dB', '6dB'])
+        print(pivot_df)
         # Draw a heatmap
         ax = self.fig.add_subplot(1,1,1)
         ax.cla()
@@ -252,7 +254,7 @@ class Visualizer(object):
         ax.set_yticklabels(ax.get_yticklabels(), rotation=0)
 
 
-    def grid_plot_f1(self, data):
+    def grid_plot_f1(self, data, model_id):
         # Preprocess data
         df_list = []
         for model, model_data in data.items():
@@ -266,7 +268,8 @@ class Visualizer(object):
         pivot_df = df.pivot_table(values='F1', index='Model', columns='Model_DB')
 
         # Reindex to ensure order
-        pivot_df = pivot_df.reindex(index=['id_00_min6dB', 'id_00_0dB', 'id_00_6dB'], columns=['min6dB', '0dB', '6dB'])
+        pivot_df = pivot_df.reindex(index=[f'id_{model_id}_min6dB', f'id_{model_id}_0dB', f'id_{model_id}_6dB'], columns=['min6dB', '0dB', '6dB'])
+        # pivot_df = pivot_df.reindex(index=['id_00_min6dB', 'id_00_0dB', 'id_00_6dB'], columns=['min6dB', '0dB', '6dB'])
 
         # Draw a heatmap
         ax = self.fig.add_subplot(1,1,1)
@@ -296,7 +299,7 @@ if __name__ == '__main__':
     # dirs = sorted(glob.glob(os.path.abspath("{base}/*/*/*".format(base=param["base_directory"]))))
 
     # pump id 
-    id = '00'
+    id = '06'
     dirs = [f'Z:\\BA\\mimii_baseline\\dataset\\6dB\\pump\\id_{id}', f'Z:\\BA\\mimii_baseline\\dataset\\0dB\\pump\\id_{id}', f'Z:\\BA\\mimii_baseline\\dataset\\min6dB\\pump\\id_{id}']
     print(dirs)
 
@@ -390,9 +393,11 @@ if __name__ == '__main__':
                     threshold = stats.norm.ppf(percentile, loc=mean, scale=std)
                     anomaly_score = [score / threshold for score in y_pred]
                     y_pred = anomaly_score
+                    print(y_pred)
 
                     # binary prediction based on the anomaly score
                     y_pred_binary = [1 if score > 1 else 0 for score in anomaly_score]
+                    print(y_pred_binary)
 
                     # print('error', error)
                     # print(np.shape(error))
@@ -401,17 +406,13 @@ if __name__ == '__main__':
 
                     # AUC
                     auc_score = metrics.roc_auc_score(y_true, y_pred)
-                    print("AUC : {}".format(auc_score))
-                    # evaluation_result["AUC"] = float(auc_score)
+                    print("AUC : {}".format(auc_score))                    
                     
-
                     # F1
                     # threshold = np.median(y_pred)
                     # y_pred_binary = [1 if pred > threshold else 0 for pred in y_pred]
                     f1_score = metrics.f1_score(y_true, y_pred_binary)
                     print("F1 Score : {}".format(f1_score))
-                    # evaluation_result["F1"] = float(f1_score)
-
 
                     results[machine_id][model_db][eval_db] = {
                         "AUC": auc_score,
@@ -432,16 +433,21 @@ if __name__ == '__main__':
             results = json.load(f)
         print(results)
         
+        # create directories for saving the grid results
         grid_eval_dir = param['result_grid_directory']
         grid_eval_path = f'{grid_eval_dir}/{date_str}'
 
         if not os.path.exists(grid_eval_path):
+            os.makedirs(grid_eval_dir)
+
+        if not os.path.exists(grid_eval_path):
             os.makedirs(grid_eval_path)
 
+        # visualize grids
         visualiser = Visualizer()
         print(f'{grid_eval_path}/model_id_{id}_AUC.png')
-        visualiser.grid_plot_auc(results)
+        visualiser.grid_plot_auc(results, id)
         visualiser.save_figure(f'{grid_eval_path}/model_id_{id}_AUC.png')
 
-        visualiser.grid_plot_f1(results)
+        visualiser.grid_plot_f1(results, id)
         visualiser.save_figure(f'{grid_eval_path}/model_id_{id}_F1.png')

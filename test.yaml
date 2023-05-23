@@ -2,7 +2,7 @@ base_directory : Z:\\BA\\mimii_baseline\\dataset
 pickle_directory: ./pickle/test
 model_directory: ./models/mimii
 result_directory: ./results
-result_grid_directory: ./models/mimii/grid_evaluation
+result_grid_directory: ./results/grid_evaluation
 result_file: result.yaml
 
 feature:
