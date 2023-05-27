@@ -18,10 +18,7 @@ import matplotlib.pyplot as plt
 from datetime import datetime
 from sklearn import metrics
 from tqdm import tqdm
-from sklearn.metrics import precision_recall_curve
 
-
-import logging
 import librosa
 
 ####################################################################################
@@ -275,12 +272,12 @@ class Visualizer(object):
 
 
     def recon_plot(self, data, label, n_abnorm, perc, eval_dB):
-        self.fig = plt.figure(figsize=(30, 10), dpi=1000)
         """
         input:  data:   y_pred as reconstruction error of all files
                 label:  machine type, id and db
                 n_abnorm: number of abnormal files for the train eval split
         """
+        self.fig = plt.figure(figsize=(30, 10), dpi=1000)
         ax = self.fig.add_subplot(1, 1, 1)
         ax.cla()
         ax.scatter(np.arange(len(data[:n_abnorm])), data[:n_abnorm], label='normal')
@@ -292,10 +289,29 @@ class Visualizer(object):
         ax.legend(loc="upper left", fontsize=22)
         ax.tick_params(axis='both', labelsize=22)
         
+        # define y limit, scatter dots are better
+        # visible if not starting at 0
         if min(data) > 0.6:
             ax.set_ylim(0.55)
         else:
             ax.set_ylim(min(data)-0.05)
+
+    def conf_matrix_plot(self, y_true, y_pred, label, eval_dB):
+        self.fig = plt.figure(figsize=(15, 15), dpi=1200)
+        
+        ax = self.fig.add_subplot(1, 1, 1)
+        ax.cla()
+        conf_matrix = metrics.confusion_matrix(y_true, y_pred)
+        print(conf_matrix)
+        ax.matshow(conf_matrix, cmap=plt.cm.Oranges, alpha=0.3)
+        for i in range(conf_matrix.shape[0]):
+            for j in range(conf_matrix.shape[1]):
+                ax.text(x=j, y=i,s=conf_matrix[i, j], va='center', ha='center')
+        
+        ax.set_title(f'Confusion Matrix - Model {label} on testset {eval_dB}', fontsize=22)
+        ax.set_xlabel('Predictions', fontsize=22)
+        ax.set_ylabel('Actuals', fontsize=22)
+        ax.tick_params(axis='both', labelsize=18)
 
 
     def save_figure(self, name):
@@ -306,8 +322,10 @@ class Visualizer(object):
 ####################################################################################
 if __name__ == '__main__':
     evaluation = True
-    anomaly_plot = True
-    gen_plot = True
+    anomaly_plot = False
+    conf_plot = True
+    gen_plot = False
+
 
 
     # load parameter yaml
@@ -318,7 +336,7 @@ if __name__ == '__main__':
     # dirs = sorted(glob.glob(os.path.abspath("{base}/*/*/*".format(base=param["base_directory"]))))
 
     # pump id 
-    id = '00'
+    id = '06'
     dirs = [f'Z:\\BA\\mimii_baseline\\dataset\\6dB\\pump\\id_{id}', f'Z:\\BA\\mimii_baseline\\dataset\\0dB\\pump\\id_{id}', f'Z:\\BA\\mimii_baseline\\dataset\\min6dB\\pump\\id_{id}']
     print(dirs)
 
@@ -336,11 +354,21 @@ if __name__ == '__main__':
         grid_eval_dir = param['result_model_anomaly']
         grid_eval_path = f'{grid_eval_dir}/{date_str}'
 
+        # dir for conf_matrix plots
+        conf_matrix_dir = param['result_conf_matrix']
+        conf_matrix_path = f'{conf_matrix_dir}/{date_str}'
+
         if not os.path.exists(grid_eval_dir):
             os.makedirs(grid_eval_dir)
 
         if not os.path.exists(grid_eval_path):
             os.makedirs(grid_eval_path)
+
+        if not os.path.exists(conf_matrix_dir):
+            os.makedirs(conf_matrix_dir)
+
+        if not os.path.exists(conf_matrix_path):
+            os.makedirs(conf_matrix_path)        
 
         # load models
         model_dir = param["model_directory"]
@@ -390,6 +418,10 @@ if __name__ == '__main__':
                     n_norm_abnorm = eval_data['n_norm_abnorm']
                     min_val, max_val = eval_data['norm_values']
 
+                    evaluation_result_key = "{machine_type}_{machine_id}_{db}".format(machine_type=machine_type,
+                                                                            machine_id=machine_id,
+                                                                            db=model_db)
+                    
                     # model evaluation
                     print('evaluation')
 
@@ -442,23 +474,32 @@ if __name__ == '__main__':
                     # y_pred_binary = [1 if pred > threshold else 0 for pred in y_pred]
                     f1_score = metrics.f1_score(y_true, y_pred_binary)
                     print("F1 Score : {}".format(f1_score))
-
+                    
+                    # precision, recall
+                    precision = metrics.precision_score(y_true, y_pred_binary)
+                    recall = metrics.recall_score(y_true, y_pred_binary)
+                    print("Precision : {}".format(precision))
+                    print("Recall : {}".format(recall))
+                    
                     results[machine_id][model_db][eval_db] = {
                         "AUC": auc_score,
-                        "F1": f1_score
+                        "F1": f1_score,
+                        "Precision": precision,
+                        "Recall": recall
                     }
 
 
                     # plot anomaly score
                     if anomaly_plot == True:
                         vis_recon = Visualizer()
-
-                        evaluation_result_key = "{machine_type}_{machine_id}_{db}".format(machine_type=machine_type,
-                                                                            machine_id=machine_id,
-                                                                            db=model_db)
-                        
                         vis_recon.recon_plot(y_pred, evaluation_result_key, n_norm_abnorm[1], percentile, eval_db)
                         vis_recon.save_figure(f'{grid_eval_path}/model_id_{id}_{model_db}_testset_{eval_db}_anomaly_score.png')
+
+                    if conf_plot == True:
+                        vis_conf = Visualizer()
+                        vis_conf.conf_matrix_plot(y_true, y_pred_binary, evaluation_result_key, eval_db)
+                        vis_conf.save_figure(f'{conf_matrix_path}/model_id_{id}_{model_db}_testset_{eval_db}_conf_matrix.png')
+
 
                 else:
                     print(f"Warning: No data found for db level {eval_db} for model {info['model_name']}")
