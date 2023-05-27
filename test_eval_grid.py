@@ -291,10 +291,10 @@ class Visualizer(object):
         
         # define y limit, scatter dots are better
         # visible if not starting at 0
-        if min(data) > 0.6:
-            ax.set_ylim(0.55)
+        if min(data) > 0.6 and max(data) < 2.0:
+            ax.set_ylim(0.55, 2.05)
         else:
-            ax.set_ylim(min(data)-0.05)
+            ax.set_ylim(min(data)-0.05, max(data)+0.05)
 
     def conf_matrix_plot(self, y_true, y_pred, label, eval_dB):
         self.fig = plt.figure(figsize=(15, 15), dpi=1200)
@@ -302,17 +302,22 @@ class Visualizer(object):
         ax = self.fig.add_subplot(1, 1, 1)
         ax.cla()
         conf_matrix = metrics.confusion_matrix(y_true, y_pred)
-        print(conf_matrix)
+        # print(conf_matrix)
         ax.matshow(conf_matrix, cmap=plt.cm.Oranges, alpha=0.3)
         for i in range(conf_matrix.shape[0]):
             for j in range(conf_matrix.shape[1]):
-                ax.text(x=j, y=i,s=conf_matrix[i, j], va='center', ha='center')
+                ax.text(x=j, y=i,s=conf_matrix[i, j], va='center', ha='center', size=22)
         
-        ax.set_title(f'Confusion Matrix - Model {label} on testset {eval_dB}', fontsize=22)
+        ax.set_title(f'Confusion Matrix - Model {label} on testset {eval_dB}', fontsize=22, pad=24)
         ax.set_xlabel('Predictions', fontsize=22)
         ax.set_ylabel('Actuals', fontsize=22)
-        ax.tick_params(axis='both', labelsize=18)
 
+        ax.xaxis.set_major_locator(plt.FixedLocator([0, 1]))  # Set x-axis major locator
+        ax.xaxis.set_major_formatter(plt.FixedFormatter(['Negative', 'Positive']))  # Set x-axis formatter
+
+        ax.yaxis.set_major_locator(plt.FixedLocator([0, 1]))  # Set y-axis major locator
+        ax.yaxis.set_major_formatter(plt.FixedFormatter(['Negative', 'Positive']))  # Set y-axis formatter
+        ax.tick_params(axis='both', labelsize=18)
 
     def save_figure(self, name):
         self.fig.savefig(name)
@@ -322,9 +327,9 @@ class Visualizer(object):
 ####################################################################################
 if __name__ == '__main__':
     evaluation = True
-    anomaly_plot = False
+    anomaly_plot = True
     conf_plot = True
-    gen_plot = False
+    gen_plot = True
 
 
 
@@ -500,14 +505,13 @@ if __name__ == '__main__':
                         vis_conf.conf_matrix_plot(y_true, y_pred_binary, evaluation_result_key, eval_db)
                         vis_conf.save_figure(f'{conf_matrix_path}/model_id_{id}_{model_db}_testset_{eval_db}_conf_matrix.png')
 
-
                 else:
                     print(f"Warning: No data found for db level {eval_db} for model {info['model_name']}")
+
         print(results)
         with open(filepath, 'w') as f:
             json.dump(results, f)
             print('Results saved to file: {}'.format(filepath))
-
 
 
     if gen_plot == True:
@@ -533,3 +537,9 @@ if __name__ == '__main__':
 
         visualiser.grid_plot(results, id, "F1")
         visualiser.save_figure(f'{grid_eval_path}/model_id_{id}_F1.png')
+
+        visualiser.grid_plot(results, id, "Precision")
+        visualiser.save_figure(f'{grid_eval_path}/model_id_{id}_Precision.png')
+
+        visualiser.grid_plot(results, id, "Recall")
+        visualiser.save_figure(f'{grid_eval_path}/model_id_{id}_Recall.png')
