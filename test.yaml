@@ -5,6 +5,7 @@ result_directory: ./results
 result_grid_directory: ./results/grid_evaluation
 result_model_anomaly: ./results/model_anomaly
 result_conf_matrix: ./results/conf_matrix
+result_roc_curve: ./results/roc_curve
 result_file: result.yaml
 
 feature:

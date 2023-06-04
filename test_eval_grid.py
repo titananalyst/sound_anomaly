@@ -17,6 +17,7 @@ import tensorflow as tf
 import matplotlib.pyplot as plt
 from datetime import datetime
 from sklearn import metrics
+# import scikitplot as skplt
 from tqdm import tqdm
 
 import librosa
@@ -228,7 +229,7 @@ cmap = LinearSegmentedColormap.from_list('rg', color_list, N=256)
 
 class Visualizer(object):
     def __init__(self):
-        self.fig = plt.figure(figsize=(20, 17), dpi=1200)
+        self.fig = plt.figure(figsize=(20, 17))
         plt.subplots_adjust(wspace=0.3, hspace=0.3)
 
     def grid_plot(self, data, model_id, metric):
@@ -258,10 +259,10 @@ class Visualizer(object):
                               linewidths=2,
                               linecolor="white", 
                               annot_kws={"size":18}, 
-                              cbar_kws={'label': 'Accuracy %',
+                              cbar_kws={'label': 'Score %',
                                         "ticks":[0, 0.3, 0.5, 0.7, 1]},)
         
-        ax.set_title(f"Model Performance ({metric})", fontsize=22)
+        ax.set_title(f"Model Performance ({metric})", fontsize=22, pad=24)
         ax.set_xlabel('testset_dB', fontsize=22)
         ax.set_ylabel(f'model id_{model_id}', fontsize=22)
         ax.set_yticklabels(ax.get_yticklabels(), rotation=0)  # rotation labels x,y axis
@@ -277,13 +278,13 @@ class Visualizer(object):
                 label:  machine type, id and db
                 n_abnorm: number of abnormal files for the train eval split
         """
-        self.fig = plt.figure(figsize=(30, 10), dpi=1000)
+        self.fig = plt.figure(figsize=(30, 10))
         ax = self.fig.add_subplot(1, 1, 1)
         ax.cla()
         ax.scatter(np.arange(len(data[:n_abnorm])), data[:n_abnorm], label='normal')
         ax.scatter(np.arange(len(data[n_abnorm:])) + n_abnorm, data[n_abnorm:], label='abnormal')
-        ax.axhline(y=1, color='black', linestyle='-', label=f'Percentile ({perc})')
-        ax.set_title(f'Anomaly Score - Model {label} on testset {eval_dB}', fontsize=22)
+        ax.axhline(y=1, color='black', linestyle='-', label=f'Percentile ({perc*100} %)')
+        ax.set_title(f'Anomaly Score - Model {label} on testset {eval_dB}', fontsize=22, pad=24)
         ax.set_xlabel('File Index', fontsize=22)
         ax.set_ylabel('Anomaly Score', fontsize=22)
         ax.legend(loc="upper left", fontsize=22)
@@ -291,13 +292,12 @@ class Visualizer(object):
         
         # define y limit, scatter dots are better
         # visible if not starting at 0
-        if min(data) > 0.6 and max(data) < 2.0:
-            ax.set_ylim(0.55, 2.05)
-        else:
-            ax.set_ylim(min(data)-0.05, max(data)+0.05)
+        lb = min(data) - 0.05 if min(data) < 0.6 else 0.55
+        ub = max(data) + 0.05 if max(data) > 2.0 else 2.05
+        ax.set_ylim(lb, ub)
 
     def conf_matrix_plot(self, y_true, y_pred, label, eval_dB):
-        self.fig = plt.figure(figsize=(15, 15), dpi=1200)
+        self.fig = plt.figure(figsize=(15, 15))
         
         ax = self.fig.add_subplot(1, 1, 1)
         ax.cla()
@@ -319,8 +319,24 @@ class Visualizer(object):
         ax.yaxis.set_major_formatter(plt.FixedFormatter(['Negative', 'Positive']))  # Set y-axis formatter
         ax.tick_params(axis='both', labelsize=18)
 
+    def roc_curve_plot(self, y_true, y_pred, label, eval_dB):
+        # precision recall curve
+        ax = self.fig.add_subplot(1,1,1)
+        ax.cla()
+        fpr, tpr, _= metrics.roc_curve(y_true, y_pred)
+        roc_auc = metrics.auc(y_true, y_pred)
+        # roc = metrics.RocCurveDisplay.from_predictions(fpr=fpr, tpr=tpr, roc_auc=roc_auc)
+        roc = metrics.RocCurveDisplay.from_predictions(y_true, y_pred, label=label)
+
+        roc.plot(ax=ax)
+        ax.set_xlabel('False Positive Rate', fontsize=22)
+        ax.set_ylabel('True Positive Rate', fontsize=22)
+        ax.set_title(f'ROC Curve - Model {label} on testset {eval_dB}', fontsize=22, pad=24)
+        ax.legend(fontsize=22, loc="lower right")
+        ax.tick_params(axis='both', labelsize=22)
+
     def save_figure(self, name):
-        self.fig.savefig(name)
+        self.fig.savefig(name + ".pdf", dpi=300)
         print('Image saved!')
         self.fig.clf()
 
@@ -329,8 +345,8 @@ if __name__ == '__main__':
     evaluation = True
     anomaly_plot = True
     conf_plot = True
+    roc_plot = True
     gen_plot = True
-
 
 
     # load parameter yaml
@@ -363,6 +379,10 @@ if __name__ == '__main__':
         conf_matrix_dir = param['result_conf_matrix']
         conf_matrix_path = f'{conf_matrix_dir}/{date_str}'
 
+        # dir for roc curve
+        roc_curve_dir = param['result_roc_curve']
+        roc_curve_path = f'{roc_curve_dir}/{date_str}'
+
         if not os.path.exists(grid_eval_dir):
             os.makedirs(grid_eval_dir)
 
@@ -373,7 +393,13 @@ if __name__ == '__main__':
             os.makedirs(conf_matrix_dir)
 
         if not os.path.exists(conf_matrix_path):
-            os.makedirs(conf_matrix_path)        
+            os.makedirs(conf_matrix_path)   
+
+        if not os.path.exists(roc_curve_dir):
+            os.makedirs(roc_curve_dir)
+
+        if not os.path.exists(roc_curve_path):
+            os.makedirs(roc_curve_path)       
 
         # load models
         model_dir = param["model_directory"]
@@ -404,6 +430,10 @@ if __name__ == '__main__':
             if model_db not in results[machine_id]:
                 results[machine_id][model_db] = {}
             
+            # dot_img_file = "img/model_1.pdf"
+            # tf.keras.utils.plot_model(model, to_file=dot_img_file, show_shapes=True)
+            # print("Model plotted!")
+            # model.summary()
             # load model
             autoencoder = model
                 
@@ -443,8 +473,10 @@ if __name__ == '__main__':
                                             pwr = param['feature']['power'])
                             
                             data, _, _ = normalize_data(data, min_val, max_val)
-                            # error = np.mean(np.square(data - autoencoder.predict(data)), axis=1)
-                            error = np.mean(abs(data - autoencoder.predict(data, verbose=0)), axis=1)
+                            # mse
+                            error = np.mean(np.square(data - autoencoder.predict(data, verbose=0)), axis=1)
+                            # mae
+                            # error = np.mean(abs(data - autoencoder.predict(data, verbose=0)), axis=1)
                             y_pred[num] = np.mean(error)
                             
                         except:
@@ -485,6 +517,8 @@ if __name__ == '__main__':
                     recall = metrics.recall_score(y_true, y_pred_binary)
                     print("Precision : {}".format(precision))
                     print("Recall : {}".format(recall))
+
+                    # roc curve
                     
                     results[machine_id][model_db][eval_db] = {
                         "AUC": auc_score,
@@ -498,12 +532,17 @@ if __name__ == '__main__':
                     if anomaly_plot == True:
                         vis_recon = Visualizer()
                         vis_recon.recon_plot(y_pred, evaluation_result_key, n_norm_abnorm[1], percentile, eval_db)
-                        vis_recon.save_figure(f'{grid_eval_path}/model_id_{id}_{model_db}_testset_{eval_db}_anomaly_score.png')
+                        vis_recon.save_figure(f'{grid_eval_path}/model_id_{id}_{model_db}_testset_{eval_db}_anomaly_score')
 
                     if conf_plot == True:
                         vis_conf = Visualizer()
                         vis_conf.conf_matrix_plot(y_true, y_pred_binary, evaluation_result_key, eval_db)
-                        vis_conf.save_figure(f'{conf_matrix_path}/model_id_{id}_{model_db}_testset_{eval_db}_conf_matrix.png')
+                        vis_conf.save_figure(f'{conf_matrix_path}/model_id_{id}_{model_db}_testset_{eval_db}_conf_matrix')
+
+                    if roc_plot == True:
+                        vis_roc = Visualizer()
+                        vis_roc.roc_curve_plot(y_true, y_pred_binary, evaluation_result_key, eval_db)
+                        vis_roc.save_figure(f'{roc_curve_path}/model_id_{id}_{model_db}_testset_{eval_db}_roc_curve')
 
                 else:
                     print(f"Warning: No data found for db level {eval_db} for model {info['model_name']}")
@@ -531,15 +570,15 @@ if __name__ == '__main__':
 
         # visualize grids
         visualiser = Visualizer()
-        print(f'{grid_eval_path}/model_id_{id}_AUC.png')
+        print(f'{grid_eval_path}/model_id_{id}_AUC')
         visualiser.grid_plot(results, id, "AUC")
-        visualiser.save_figure(f'{grid_eval_path}/model_id_{id}_AUC.png')
+        visualiser.save_figure(f'{grid_eval_path}/model_id_{id}_AUC')
 
         visualiser.grid_plot(results, id, "F1")
-        visualiser.save_figure(f'{grid_eval_path}/model_id_{id}_F1.png')
+        visualiser.save_figure(f'{grid_eval_path}/model_id_{id}_F1')
 
         visualiser.grid_plot(results, id, "Precision")
-        visualiser.save_figure(f'{grid_eval_path}/model_id_{id}_Precision.png')
+        visualiser.save_figure(f'{grid_eval_path}/model_id_{id}_Precision')
 
         visualiser.grid_plot(results, id, "Recall")
-        visualiser.save_figure(f'{grid_eval_path}/model_id_{id}_Recall.png')
+        visualiser.save_figure(f'{grid_eval_path}/model_id_{id}_Recall')

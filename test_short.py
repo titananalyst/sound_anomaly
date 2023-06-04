@@ -92,7 +92,7 @@ class Visualizer(object):
         ax.cla()
         ax.scatter(np.arange(len(data[:n_abnorm])), data[:n_abnorm], label='normal')
         ax.scatter(np.arange(len(data[n_abnorm:])) + n_abnorm, data[n_abnorm:], label='abnormal')
-        ax.axhline(y=1, color='black', linestyle='-', label=f'Percentile ({perc})')
+        ax.axhline(y=1, color='black', linestyle='-', label=f'Percentile ({perc*100} %)')
         ax.set_title(f'Anomaly Detection - {label}', fontsize=22)
         ax.set_xlabel('File Index', fontsize=22)
         ax.set_ylabel('Anomaly Score', fontsize=22)
@@ -808,6 +808,14 @@ if __name__ == '__main__':
         autoencoder.summary()
         # report model summary
         encoder.summary()
+        decoder.summary()
+        # dot_img_file_1 = "img/autoencoder.pdf"
+        # dot_img_file_2 = "img/encoder.pdf"
+        # dot_img_file_3 = "img/decoder.pdf"
+        # tf.keras.utils.plot_model(autoencoder, to_file=dot_img_file_1, show_shapes=True)
+        # tf.keras.utils.plot_model(encoder, to_file=dot_img_file_2, show_shapes=True)
+        # tf.keras.utils.plot_model(decoder, to_file=dot_img_file_3, show_shapes=True)
+        # print("Model plotted!")
 
         if os.path.exists(model_file):
             autoencoder = tf.keras.models.load_model(model_file)
@@ -822,6 +830,13 @@ if __name__ == '__main__':
             visualizer.loss_plot(history.history['loss'], history.history['val_loss'], evaluation_result_key)
             visualizer.save_figure(history_img)
             autoencoder.save(model_file)
+            dot_img_file_1 = "img/autoencoder_1.pdf"
+            dot_img_file_2 = "img/encoder_1.pdf"
+            dot_img_file_3 = "img/decoder_1.pdf"
+            tf.keras.utils.plot_model(autoencoder, to_file=dot_img_file_1, show_shapes=True)
+            tf.keras.utils.plot_model(encoder, to_file=dot_img_file_2, show_shapes=True)
+            tf.keras.utils.plot_model(decoder, to_file=dot_img_file_3, show_shapes=True)
+            print("Model plotted!")
 
 
         # model evaluation
@@ -840,8 +855,10 @@ if __name__ == '__main__':
                 
                 if normalization == True:
                     data, _, _ = normalize_data(data, min_val, max_val)
-                # error = np.mean(np.square(data - autoencoder.predict(data)), axis=1)
-                error = np.mean(abs(data - autoencoder.predict(data, verbose=0)), axis=1)
+                # mse
+                error = np.mean(np.square(data - autoencoder.predict(data, verbose=0)), axis=1)
+                # mae
+                # error = np.mean(abs(data - autoencoder.predict(data, verbose=0)), axis=1)
                 y_pred[num] = np.mean(error)
                 
             except:

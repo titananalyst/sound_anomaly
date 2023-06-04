@@ -884,7 +884,10 @@ if __name__ == '__main__':
                                     pwr = param['feature']['power'])
                     if normalization == True:
                         data, _, _ = normalize_data(data, [], [], max_v=1.0, min_v=0.0)
-                    error = np.mean(np.square(data - autoencoder.predict(data)), axis=1)
+                    # mse
+                    error = np.mean(np.square(data - autoencoder.predict(data, verbose=0)), axis=1)
+                    # mae
+                    # error = np.mean(abs(data - autoencoder.predict(data, verbose=0)), axis=1)
                     y_pred[num] = np.mean(error)
 
                 except:
@@ -976,7 +979,10 @@ if __name__ == '__main__':
                                 pwr = param['feature']['power'])
                 if normalization == True:
                     data, _, _ = normalize_data(data, [], [], max_v=1.0, min_v=0.0)
-                error = np.mean(np.square(data - autoencoder.predict(data)), axis=1)
+                # mse
+                error = np.mean(np.square(data - autoencoder.predict(data, verbose=0)), axis=1)
+                # mae
+                # error = np.mean(abs(data - autoencoder.predict(data, verbose=0)), axis=1)
                 y_pred[num] = np.mean(error)
         
 
