@@ -1,0 +1,11 @@
+@software{keller_jonas_zhaw_rto_sound_anomaly_2023,
+	title = {{ZHAW}-{RTO}-anomaly-detection},
+	url = {https://github.zhaw.ch/kellejo6/ZHAW-RTO-anomaly-detection},
+	shorttitle = {kellejo6/{ZHAW}-{RTO}-anomaly-detection},
+	abstract = {Contribute to kellejo6/{ZHAW}-{RTO}-anomaly-detection development by creating an account on {GitHub}.},
+	titleaddon = {{GitHub} Enterprise {ZHAW}},
+	author = {{Jonas Keller}},
+	urldate = {2023-06-04},
+	date = {2023-06-04},
+	langid = {english},
+}
