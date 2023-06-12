@@ -213,6 +213,32 @@ def load_data_from_directory(param, base_dir):
 
     return all_data
 
+def calculate_metrics(y_true, y_pred):
+    richtig_normal = sum((y_true == 0) & (y_pred == 0))
+    falsch_normal = sum((y_true == 1) & (y_pred == 0))
+    richtig_abnormal = sum((y_true == 1) & (y_pred == 1))
+    falsch_abnormal = sum((y_true == 0) & (y_pred == 1))
+
+     
+    if richtig_normal + falsch_normal == 0:
+        if richtig_normal == 0:
+            precision = 0.0
+        else:
+            precision = np.nan
+    else:
+        precision = richtig_normal / (richtig_normal + falsch_normal)
+    
+    if richtig_normal + falsch_abnormal == 0:
+        recall = np.nan
+    else:
+        recall = richtig_normal / (richtig_normal + falsch_abnormal)
+    
+    f1_score = (2 * (precision * recall)) / (precision + recall)
+    # roc_auc = metrics.roc_auc_score(y_true, y_pred)
+
+    return precision, recall, f1_score
+
+
 ####################################################################################
 
 ####################################################################################
@@ -233,6 +259,7 @@ class Visualizer(object):
         plt.subplots_adjust(wspace=0.3, hspace=0.3)
 
     def grid_plot(self, data, model_id, metric):
+        self.fig = plt.figure(figsize=(20, 17))
         """plot"""
         # Preprocess data
         df_list = []
@@ -250,7 +277,7 @@ class Visualizer(object):
         
         # Reindex to ensure order
         pivot_df = pivot_df.reindex(index=[f'id_{model_id}_min6dB', f'id_{model_id}_0dB', f'id_{model_id}_6dB'], columns=['min6dB', '0dB', '6dB'])
-        # print(pivot_df)
+        print(pivot_df)
         
         # Draw a heatmap
         ax = self.fig.add_subplot(1,1,1)
@@ -258,18 +285,19 @@ class Visualizer(object):
         heatmap = sns.heatmap(pivot_df, annot=True, cmap=cmap, vmin=0, vmax=1,
                               linewidths=2,
                               linecolor="white", 
-                              annot_kws={"size":18}, 
+                              annot_kws={"size":28}, 
                               cbar_kws={'label': 'Score %',
                                         "ticks":[0, 0.3, 0.5, 0.7, 1]},)
         
-        ax.set_title(f"Model Performance ({metric})", fontsize=22, pad=24)
-        ax.set_xlabel('testset_dB', fontsize=22)
-        ax.set_ylabel(f'model id_{model_id}', fontsize=22)
+        # ax.set_title(f"Modell Performance ({metric})", fontsize=36, pad=28)
+        ax.set_xlabel('Testset_dB', fontsize=32)
+        ax.set_ylabel(f'Modell id_{model_id}', fontsize=32)
         ax.set_yticklabels(ax.get_yticklabels(), rotation=0)  # rotation labels x,y axis
-        ax.tick_params(axis='both', labelsize=18)
+        ax.tick_params(axis='both', labelsize=28)
         cax = ax.figure.axes[-1]  # access colorbar
-        cax.tick_params(labelsize=18) # cbar tick size
-        cax.yaxis.label.set_size(20) # label "Accuracy %"
+        cax.tick_params(labelsize=28) # cbar tick size
+        cax.yaxis.label.set_size(30) # label "Score %"
+        self.fig.tight_layout()
 
 
     def recon_plot(self, data, label, n_abnorm, perc, eval_dB):
@@ -283,41 +311,52 @@ class Visualizer(object):
         ax.cla()
         ax.scatter(np.arange(len(data[:n_abnorm])), data[:n_abnorm], label='normal')
         ax.scatter(np.arange(len(data[n_abnorm:])) + n_abnorm, data[n_abnorm:], label='abnormal')
-        ax.axhline(y=1, color='black', linestyle='-', label=f'Percentile ({perc*100} %)')
-        ax.set_title(f'Anomaly Score - Model {label} on testset {eval_dB}', fontsize=22, pad=24)
-        ax.set_xlabel('File Index', fontsize=22)
-        ax.set_ylabel('Anomaly Score', fontsize=22)
-        ax.legend(loc="upper left", fontsize=22)
-        ax.tick_params(axis='both', labelsize=22)
+        ax.axhline(y=1, color='black', linestyle='-', linewidth=2.0, label=f'Perzentil ({perc*100} %)')
+        ax.set_title(f'Anomaly Score - Modell {label} auf Testset {eval_dB}', fontsize=38, pad=24)
+        ax.set_xlabel('Index .wav-Datei', fontsize=32)
+        ax.set_ylabel('Anomaly Score', fontsize=32)
+        ax.legend(loc="upper left", fontsize=28)
+        ax.tick_params(axis='both', labelsize=30)
         
         # define y limit, scatter dots are better
         # visible if not starting at 0
-        lb = min(data) - 0.05 if min(data) < 0.6 else 0.55
+        # lb = min(data) - 0.05 if min(data) < 0.6 else 0.55
         ub = max(data) + 0.05 if max(data) > 2.0 else 2.05
-        ax.set_ylim(lb, ub)
+        # ax.set_ylim(lb, ub)
+        ax.set_ylim(0, ub)
 
     def conf_matrix_plot(self, y_true, y_pred, label, eval_dB):
-        self.fig = plt.figure(figsize=(15, 15))
+        self.fig = plt.figure(figsize=(18, 15))
         
         ax = self.fig.add_subplot(1, 1, 1)
         ax.cla()
-        conf_matrix = metrics.confusion_matrix(y_true, y_pred)
+        # conf_matrix = metrics.confusion_matrix(y_true, y_pred)
+
+        conf_matrix = metrics.confusion_matrix(y_true, y_pred, labels=[1, 0])
+        # Swap rows
+        conf_matrix = np.flip(conf_matrix, 0)
+        # Swap columns
+        conf_matrix = np.flip(conf_matrix, 1)
+        print(conf_matrix)
         # print(conf_matrix)
+
         ax.matshow(conf_matrix, cmap=plt.cm.Oranges, alpha=0.3)
         for i in range(conf_matrix.shape[0]):
             for j in range(conf_matrix.shape[1]):
-                ax.text(x=j, y=i,s=conf_matrix[i, j], va='center', ha='center', size=22)
+                ax.text(x=j, y=i,s=conf_matrix[i, j], va='center', ha='center', size=26)
         
-        ax.set_title(f'Confusion Matrix - Model {label} on testset {eval_dB}', fontsize=22, pad=24)
-        ax.set_xlabel('Predictions', fontsize=22)
-        ax.set_ylabel('Actuals', fontsize=22)
+        ax.set_title(f'Modell {label} auf Testset {eval_dB}', fontsize=32, pad=24)
+        ax.set_xlabel('Predicted Class', fontsize=30)
+        ax.set_ylabel('True Class', fontsize=30)
 
         ax.xaxis.set_major_locator(plt.FixedLocator([0, 1]))  # Set x-axis major locator
-        ax.xaxis.set_major_formatter(plt.FixedFormatter(['Negative', 'Positive']))  # Set x-axis formatter
+        # ax.xaxis.set_major_formatter(plt.FixedFormatter(['Negative', 'Positive']))  # Set x-axis formatter
+        ax.xaxis.set_major_formatter(plt.FixedFormatter(['normal', 'abnormal']))
 
         ax.yaxis.set_major_locator(plt.FixedLocator([0, 1]))  # Set y-axis major locator
-        ax.yaxis.set_major_formatter(plt.FixedFormatter(['Negative', 'Positive']))  # Set y-axis formatter
-        ax.tick_params(axis='both', labelsize=18)
+        # ax.yaxis.set_major_formatter(plt.FixedFormatter(['Negative', 'Positive']))  # Set y-axis formatter
+        ax.yaxis.set_major_formatter(plt.FixedFormatter(['normal', 'abnormal']))
+        ax.tick_params(axis='both', labelsize=26)
 
     def roc_curve_plot(self, y_true, y_pred, label, eval_dB):
         # precision recall curve
@@ -436,7 +475,52 @@ if __name__ == '__main__':
             # model.summary()
             # load model
             autoencoder = model
-                
+            
+            #############################################################################
+            # THRESHOLD FROM TRAINING DATA
+            #############################################################################
+            train_data = all_data[machine_type][machine_id][model_db]
+
+            train_files = train_data['train_files']
+            min_val, max_val = train_data['norm_values']
+            total_error = [0. for k in train_files]
+            # print(min_val, max_val)
+
+            print(f"get threshold from training data {model_db}")
+            for num, file in tqdm(enumerate(train_files), total = len(train_files)):
+                        try:
+                            data = file_dataloader(file,
+                                            n_fft = param['feature']['n_fft'],
+                                            hop_length = param['feature']['hop_length'],
+                                            n_mels = param['feature']['n_mels'],
+                                            frames = param['feature']['frames'],
+                                            pwr = param['feature']['power'])
+                            # print("1")
+                            # data, _, _ = normalize_data(data, min_val, max_val, max_v=1.0, min_v=0.0)
+                            data, _, _ = normalize_data(data, min_val, max_val)
+                            # mse
+                            # print("2")
+                            error = np.mean(np.square(data - autoencoder.predict(data, verbose=0)), axis=1)
+                            # mae
+                            # error = np.mean(abs(data - autoencoder.predict(data, verbose=0)), axis=1)
+                            # print("3")
+                            total_error[num] = np.mean(error)
+                            
+                        except:
+                            print('File broken:', file)
+
+            # calculate mean and std of the normal data
+            # normal_error = [y_pred[i] for i in range(len(y_pred)) if y_true[i] == 0]
+            mean, std = np.mean(total_error), np.std(total_error)
+
+            # percentile of the normal distribution
+            percentile = 0.998  # 99.8 percentile
+            threshold = stats.norm.ppf(percentile, loc=mean, scale=std)
+            print(threshold)
+            #############################################################################
+
+
+
             # Iterate over db levels
             for eval_db in db_levels:
                 print(f"\nEvaluating model {info['model_name']} with eval_data: {eval_db}")
@@ -446,8 +530,10 @@ if __name__ == '__main__':
                     print(f'Load eval data for {machine_type}_{machine_id}_{eval_db}')
                     # Extract the data for this model and db level
                     eval_data = all_data[machine_type][machine_id][eval_db]
+                    
 
                     # Set the variables
+                    
                     eval_files = eval_data['eval_files']
                     eval_labels = eval_data['eval_labels']
                     n_norm_abnorm = eval_data['n_norm_abnorm']
@@ -462,6 +548,7 @@ if __name__ == '__main__':
 
                     y_pred = [0. for k in eval_labels]
                     y_true = eval_labels
+                    print(y_true)
 
                     for num, file in tqdm(enumerate(eval_files), total = len(eval_files)):
                         try:
@@ -472,6 +559,7 @@ if __name__ == '__main__':
                                             frames = param['feature']['frames'],
                                             pwr = param['feature']['power'])
                             
+                            # data, _, _ = normalize_data(data, min_val, max_val, max_v=1.0, min_v=0.0)
                             data, _, _ = normalize_data(data, min_val, max_val)
                             # mse
                             error = np.mean(np.square(data - autoencoder.predict(data, verbose=0)), axis=1)
@@ -482,19 +570,23 @@ if __name__ == '__main__':
                         except:
                             print('File broken:', file)
 
-                    # calculate mean and std of the normal data
-                    normal_error = [y_pred[i] for i in range(len(y_pred)) if y_true[i] == 0]
-                    mean, std = np.mean(normal_error), np.std(normal_error)
+                    # # calculate mean and std of the normal data
+                    # normal_error = [y_pred[i] for i in range(len(y_pred)) if y_true[i] == 0]
+                    # mean, std = np.mean(normal_error), np.std(normal_error)
 
-                    # percentile of the normal distribution
-                    percentile = 0.998  # 99.8 percentile
-                    threshold = stats.norm.ppf(percentile, loc=mean, scale=std)
+                    # # percentile of the normal distribution
+                    # percentile = 0.998  # 99.8 percentile
+                    # threshold = stats.norm.ppf(percentile, loc=mean, scale=std)
+                    print(np.mean(y_pred))
+                    print(y_pred)
                     anomaly_score = [score / threshold for score in y_pred]
                     y_pred = anomaly_score
                     print(y_pred)
 
                     # binary prediction based on the anomaly score
                     y_pred_binary = [1 if score > 1 else 0 for score in anomaly_score]
+                    # because of our interpretaiton of the anomaly y_pred seems to be wrong for 
+                    # the sklearn metrics...
                     print(y_pred_binary)
 
                     # print('error', error)
@@ -518,8 +610,15 @@ if __name__ == '__main__':
                     print("Precision : {}".format(precision))
                     print("Recall : {}".format(recall))
 
-                    # roc curve
-                    
+                    ##################################################################
+                    # CORRECT EVALUATION METRICS 
+                    # because of self defining the anomaly score, the metrics are changing
+                    # because of self defining the confusion matrix, the metrics are changing
+                    y_true = np.array(y_true)
+                    y_pred_binary = np.array(y_pred_binary)
+                    precision, recall, f1_score = calculate_metrics(y_true, y_pred_binary)
+                    #################################################################
+
                     results[machine_id][model_db][eval_db] = {
                         "AUC": auc_score,
                         "F1": f1_score,

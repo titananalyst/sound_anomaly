@@ -16,6 +16,7 @@ import itertools
 import pandas as pd
 import seaborn as sns
 import tensorflow as tf
+import scipy.stats as stats
 from datetime import datetime
 from sklearn import metrics
 from sklearn.cluster import KMeans
@@ -75,13 +76,13 @@ class Visualizer(object):
         """
         ax = self.fig.add_subplot(1, 1, 1)
         ax.cla()
-        ax.plot(loss, label="Train")
-        ax.plot(val_loss, label="Test")
-        ax.set_title(f'Model loss - {label}', fontsize=22)
-        ax.set_xlabel("Epoch", fontsize=22)
-        ax.set_ylabel("Loss", fontsize=22)
-        ax.legend(loc="upper right", fontsize=22)
-        ax.tick_params(axis='both', labelsize=22)
+        ax.plot(loss, label="Train", linewidth=2.0)
+        ax.plot(val_loss, label="Test", linewidth=2.0)
+        ax.set_title(f'Modell loss - {label}', fontsize=34, pad=24)
+        ax.set_xlabel("Epoche", fontsize=28)
+        ax.set_ylabel("Loss", fontsize=28)
+        ax.legend(loc="upper right", fontsize=28)
+        ax.tick_params(axis='both', labelsize=26)
 
     def recon_plot(self, data, label, n_abnorm):
         """
@@ -93,11 +94,11 @@ class Visualizer(object):
         ax.cla()
         ax.scatter(np.arange(len(data[:n_abnorm])), data[:n_abnorm], label='normal')
         ax.scatter(np.arange(len(data[n_abnorm:])) + n_abnorm, data[n_abnorm:], label='abnormal')
-        ax.set_title(f'Reconstruction Error - {label}', fontsize=22)
-        ax.set_xlabel('File Index', fontsize=22)
-        ax.set_ylabel('Reconstruction Error', fontsize=22)
-        ax.legend(loc="upper left", fontsize=22)
-        ax.tick_params(axis='both', labelsize=22)
+        ax.set_title(f'Rekonstruktionsfehler - {label}', fontsize=34, pad = 24)
+        ax.set_xlabel('Index .wav-Datei', fontsize=28)
+        ax.set_ylabel('Rekonstruktionsfehler', fontsize=28)
+        ax.legend(loc="upper left", fontsize=28)
+        ax.tick_params(axis='both', labelsize=26)
 
     def pr_curve_plot(self, true, pred, label):
         # precision recall curve
@@ -108,10 +109,10 @@ class Visualizer(object):
         # print(precision, recall)
         prd = PrecisionRecallDisplay(precision, recall)
         prd.plot(ax=ax)
-        ax.set_xlabel('Recall', fontsize=22)
-        ax.set_ylabel('Precision', fontsize=22)
-        ax.set_title(f'Precision Recall Curve - {label}', fontsize=22)
-        ax.tick_params(axis='both', labelsize=22)
+        ax.set_xlabel('Recall', fontsize=28)
+        ax.set_ylabel('Precision', fontsize=28)
+        ax.set_title(f'Precision Recall Kurve - {label}', fontsize=34, pad=24)
+        ax.tick_params(axis='both', labelsize=26)
         
     def save_figure(self, name):
         """
@@ -122,7 +123,7 @@ class Visualizer(object):
 
         return : None
         """
-        self.fig.savefig(name)
+        self.fig.savefig(name, dpi=300)
         print('Image saved!')
         self.fig.clf()
 
@@ -591,7 +592,7 @@ def fit_model_ul(OUTFOLDER,
         plt.xlabel('epoch', fontsize=22)
         plt.legend(['train', 'val'], loc='upper left', fontsize=22)
         plt.tick_params(axis='both', labelsize=22)
-        plt.savefig('D:/9999_OneDrive_ZHAW/OneDrive - ZHAW/BA_ZHAW_RTO/img/loss/' + str(label) + '_' + strftime("%Y-%m-%d", gmtime()) +'.png')
+        plt.savefig('D:/9999_OneDrive_ZHAW/OneDrive - ZHAW/BA_ZHAW_RTO/img/loss/' + str(label) + '_' + strftime("%Y-%m-%d", gmtime()) +'.pdf', dpi=300)
         plt.clf()
         # plt.show()
 
@@ -704,9 +705,9 @@ def grid_search_ul(MODEL_PATH,
 
 ####################################################################################
 if __name__ == '__main__':
-    one_machine = True
-    result_generation = True
-    normalization = False
+    one_machine = False
+    result_generation = False
+    normalization = True
     grid_search = False
     gen = False
     grid_runs = 2
@@ -775,19 +776,24 @@ if __name__ == '__main__':
                                                                                        machine_type=machine_type,
                                                                                        machine_id=machine_id,
                                                                                        db=db)
+        norm_values_pickle = "{pickle}/norm_values_{machine_type}_{machine_id}_{db}.pickle".format(
+                                                                                       pickle=param["pickle_directory"],
+                                                                                       machine_type=machine_type,
+                                                                                       machine_id=machine_id,
+                                                                                       db=db)
         model_file = "{model}/model_{machine_type}_{machine_id}_{db}.hdf5".format(model=param["model_directory"],
                                                                                   machine_type=machine_type,
                                                                                   machine_id=machine_id,
                                                                                   db=db)
-        history_img = "{model}/history_{machine_type}_{machine_id}_{db}.png".format(model=param["model_directory"],
+        history_img = "{model}/history_{machine_type}_{machine_id}_{db}.pdf".format(model=param["model_directory"],
                                                                                     machine_type=machine_type,
                                                                                     machine_id=machine_id,
                                                                                     db=db)
-        recon_img = "{model}/recon_error_{machine_type}_{machine_id}_{db}.png".format(model=param["model_directory"],
+        recon_img = "{model}/recon_error_{machine_type}_{machine_id}_{db}.pdf".format(model=param["model_directory"],
                                                                                     machine_type=machine_type,
                                                                                     machine_id=machine_id,
                                                                                     db=db)
-        pr_curve_img = "{model}/pr_curve_{machine_type}_{machine_id}_{db}.png".format(model=param["model_directory"],
+        pr_curve_img = "{model}/pr_curve_{machine_type}_{machine_id}_{db}.pdf".format(model=param["model_directory"],
                                                                                     machine_type=machine_type,
                                                                                     machine_id=machine_id,
                                                                                     db=db)
@@ -802,7 +808,7 @@ if __name__ == '__main__':
         evaluation_result['Config'] = param['config']
 
         # generate dataset
-        if os.path.exists(train_pickle) and os.path.exists(train_labels_pickle) and os.path.exists(train_files_pickle) and os.path.exists(eval_pickle) and os.path.exists(eval_files_pickle) and os.path.exists(eval_labels_pickle) and os.path.exists(n_norm_abnorm_pickle):
+        if os.path.exists(train_pickle) and os.path.exists(train_labels_pickle) and os.path.exists(train_files_pickle) and os.path.exists(eval_pickle) and os.path.exists(eval_files_pickle) and os.path.exists(eval_labels_pickle) and os.path.exists(n_norm_abnorm_pickle) and os.path.exists(norm_values_pickle):
             train_data = load_pickle(train_pickle)
             train_files = load_pickle(train_files_pickle)
             train_labels = load_pickle(train_labels_pickle)
@@ -810,6 +816,7 @@ if __name__ == '__main__':
             eval_files = load_pickle(eval_files_pickle)
             eval_labels = load_pickle(eval_labels_pickle)
             n_norm_abnorm =load_pickle(n_norm_abnorm_pickle)
+            min_val, max_val = load_pickle(norm_values_pickle)
 
         else:        
             print("Generating dataset")
@@ -831,8 +838,12 @@ if __name__ == '__main__':
                         pwr = param['feature']['power'],
                         msg="Evaluation data: ")
             if normalization == True:
-                train_data, _, _ = normalize_data(train_data, [], [], max_v=1.0, min_v=0.0)
-                eval_data, _, _ = normalize_data(eval_data, [], [], max_v=1.0, min_v=0.0)
+                min_val = np.min(train_data, axis = 0)
+                max_val = np.max(train_data, axis = 0)
+                print(f'Norm_values generation: min {min_val}, max {max_val}')
+                save_pickle(norm_values_pickle, (min_val, max_val))
+                train_data, _, _ = normalize_data(train_data, min_val, max_val, max_v=1.0, min_v=0.0)
+                eval_data, _, _ = normalize_data(eval_data, min_val, max_val, max_v=1.0, min_v=0.0)
             
             n_norm_abnorm = (n_norm, n_abnorm)
             
@@ -883,7 +894,7 @@ if __name__ == '__main__':
                                     frames = param['feature']['frames'],
                                     pwr = param['feature']['power'])
                     if normalization == True:
-                        data, _, _ = normalize_data(data, [], [], max_v=1.0, min_v=0.0)
+                        data, _, _ = normalize_data(data, min_val, max_val, max_v=1.0, min_v=0.0)
                     # mse
                     error = np.mean(np.square(data - autoencoder.predict(data, verbose=0)), axis=1)
                     # mae
@@ -923,11 +934,11 @@ if __name__ == '__main__':
             results[evaluation_result_key] = evaluation_result
 
             visualizer.recon_plot(y_pred, evaluation_result_key, n_norm_abnorm[1])
-            visualizer.save_figure('D:/9999_OneDrive_ZHAW/OneDrive - ZHAW/BA_ZHAW_RTO/img/recon/' + evaluation_result_key + '.png')
+            visualizer.save_figure('D:/9999_OneDrive_ZHAW/OneDrive - ZHAW/BA_ZHAW_RTO/img/recon/' + evaluation_result_key + '.pdf')
 
             # precision recall curve
             visualizer.pr_curve_plot(y_true, y_pred, evaluation_result_key)
-            visualizer.save_figure('D:/9999_OneDrive_ZHAW/OneDrive - ZHAW/BA_ZHAW_RTO/img/pr_curve/' + evaluation_result_key + '.png')
+            visualizer.save_figure('D:/9999_OneDrive_ZHAW/OneDrive - ZHAW/BA_ZHAW_RTO/img/pr_curve/' + evaluation_result_key + '.pdf')
 
 
         ###############################################################
@@ -948,6 +959,7 @@ if __name__ == '__main__':
         autoencoder.summary()
         # report model summary
         encoder.summary()
+        decoder.summary()
 
         if os.path.exists(model_file):
             autoencoder = tf.keras.models.load_model(model_file)
@@ -978,7 +990,7 @@ if __name__ == '__main__':
                                 frames = param['feature']['frames'],
                                 pwr = param['feature']['power'])
                 if normalization == True:
-                    data, _, _ = normalize_data(data, [], [], max_v=1.0, min_v=0.0)
+                    data, _, _ = normalize_data(data, min_val, max_val, max_v=1.0, min_v=0.0)
                 # mse
                 error = np.mean(np.square(data - autoencoder.predict(data, verbose=0)), axis=1)
                 # mae
@@ -994,13 +1006,46 @@ if __name__ == '__main__':
         # print('y_pred', y_pred)
         # print(np.shape(y_pred))
 
+        print(f"get threshold from training data:")
+        total_error = [0. for k in train_files]
+        for num, file in tqdm(enumerate(train_files), total = len(train_files)):
+                    try:
+                        data = file_dataloader(file,
+                                        n_fft = param['feature']['n_fft'],
+                                        hop_length = param['feature']['hop_length'],
+                                        n_mels = param['feature']['n_mels'],
+                                        frames = param['feature']['frames'],
+                                        pwr = param['feature']['power'])
+                        # print("1")
+                        data, _, _ = normalize_data(data, min_val, max_val)
+                        # mse
+                        # print("2")
+                        error = np.mean(np.square(data - autoencoder.predict(data, verbose=0)), axis=1)
+                        # mae
+                        # error = np.mean(abs(data - autoencoder.predict(data, verbose=0)), axis=1)
+                        # print("3")
+                        total_error[num] = np.mean(error)
+                        
+                    except:
+                        print('File broken:', file)
+
+        # calculate mean and std of the normal data
+        # normal_error = [y_pred[i] for i in range(len(y_pred)) if y_true[i] == 0]
+        mean, std = np.mean(total_error), np.std(total_error)
+
+        # percentile of the normal distribution
+        percentile = 0.998  # 99.8 percentile
+        threshold = stats.norm.ppf(percentile, loc=mean, scale=std)
+        anomaly_score = [score / threshold for score in y_pred]
+        y_pred = anomaly_score
+        y_pred_binary = [1 if score > 1 else 0 for score in anomaly_score]
 
         # threshold with kmeans clustering
-        y_pred_array = np.array(y_pred)
-        y_pred_resh = y_pred_array.reshape(-1, 1)
-        kmeans = KMeans(n_clusters=2, random_state=0).fit(y_pred_resh)
-        centroids = kmeans.cluster_centers_
-        threshold = np.mean(centroids)
+        # y_pred_array = np.array(y_pred)
+        # y_pred_resh = y_pred_array.reshape(-1, 1)
+        # kmeans = KMeans(n_clusters=2, random_state=0).fit(y_pred_resh)
+        # centroids = kmeans.cluster_centers_
+        # threshold = np.mean(centroids)
 
 
         # AUC
@@ -1011,7 +1056,8 @@ if __name__ == '__main__':
 
         # F1
         # threshold = np.median(y_pred)
-        y_pred_binary = [1 if pred > threshold else 0 for pred in y_pred]
+        # y_pred_binary = [1 if pred > threshold else 0 for pred in y_pred]
+
         f1_score = metrics.f1_score(y_true, y_pred_binary)
         print("F1 Score : {}".format(f1_score))
         evaluation_result["F1"] = float(f1_score)

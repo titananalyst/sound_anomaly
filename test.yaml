@@ -33,7 +33,7 @@ config:
   batch_size: 512    # Batch size autoencoder - h6 = [64, 128, 512, 1024]    
   epochs: 200         # Epochs - h7 (on demand)
   seed: 229          # Seed number
-  patience: 200
+  patience: 15
         
 config_grid: 
   activ: [relu]      # Activation - h1 = ['tanh', 'relu']
