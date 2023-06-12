@@ -496,8 +496,8 @@ if __name__ == '__main__':
                                             frames = param['feature']['frames'],
                                             pwr = param['feature']['power'])
                             # print("1")
-                            # data, _, _ = normalize_data(data, min_val, max_val, max_v=1.0, min_v=0.0)
-                            data, _, _ = normalize_data(data, min_val, max_val)
+                            data, _, _ = normalize_data(data, min_val, max_val, max_v=1.0, min_v=0.0)
+                            # data, _, _ = normalize_data(data, min_val, max_val)
                             # mse
                             # print("2")
                             error = np.mean(np.square(data - autoencoder.predict(data, verbose=0)), axis=1)
@@ -559,8 +559,8 @@ if __name__ == '__main__':
                                             frames = param['feature']['frames'],
                                             pwr = param['feature']['power'])
                             
-                            # data, _, _ = normalize_data(data, min_val, max_val, max_v=1.0, min_v=0.0)
-                            data, _, _ = normalize_data(data, min_val, max_val)
+                            data, _, _ = normalize_data(data, min_val, max_val, max_v=1.0, min_v=0.0)
+                            # data, _, _ = normalize_data(data, min_val, max_val)
                             # mse
                             error = np.mean(np.square(data - autoencoder.predict(data, verbose=0)), axis=1)
                             # mae
